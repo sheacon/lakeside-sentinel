@@ -1,6 +1,8 @@
 # Lakeside Motorbikes
 
-Vehicle detection and alert system that monitors a Google Nest camera using YOLO object detection and sends email alerts via Resend. Detects bicycles and motorcycles.
+Vehicle detection and alert system that monitors a Google Nest camera using [YOLO26](https://docs.ultralytics.com/models/yolo26/#overview) object detection and sends email alerts via Resend. Detects bicycles and motorcycles.
+
+![YOLO26 Benchmark](yolo26-benchmark.jpg)
 
 ## Architecture
 
