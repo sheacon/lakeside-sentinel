@@ -19,7 +19,7 @@ VEHICLE_CLASSES: dict[int, str] = {
 class VehicleDetector:
     """Detects vehicles in frames using YOLO."""
 
-    def __init__(self, model_name: str = "yolo11s.pt", confidence_threshold: float = 0.4) -> None:
+    def __init__(self, model_name: str = "yolo26s.pt", confidence_threshold: float = 0.4) -> None:
         self._model = YOLO(model_name)
         self._confidence_threshold = confidence_threshold
 

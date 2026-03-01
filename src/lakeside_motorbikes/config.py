@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     alert_email_from: str = "alerts@xeroshot.org"
 
     # Detection
-    yolo_model: str = "yolo11s.pt"
+    yolo_model: str = "yolo26s.pt"
     yolo_confidence_threshold: float = 0.4
     crop_padding: float = 0.2
 

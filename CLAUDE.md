@@ -66,7 +66,7 @@ See `.env.example` for the full list. Key variables:
 - `GOOGLE_MASTER_TOKEN`, `GOOGLE_USERNAME`, `NEST_DEVICE_ID` - Nest auth
 - `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` - email alerts
 - `CAMERA_LATITUDE`, `CAMERA_LONGITUDE` - camera location (daylight filtering)
-- `YOLO_MODEL` (default `yolo11s.pt`) - YOLO model weights file
+- `YOLO_MODEL` (default `yolo26s.pt`) - YOLO model weights file
 - `YOLO_CONFIDENCE_THRESHOLD` (default 0.4), `CROP_PADDING` (default 0.2)
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
@@ -80,4 +80,4 @@ See `.env.example` for the full list. Key variables:
 - `@dataclass(frozen=True)` for domain models
 - Logging via `logging.getLogger(__name__)`
 - External API calls require timeout and error handling
-- YOLO model weights (e.g. `yolo11s.pt`) are git-ignored and auto-downloaded
+- YOLO model weights (e.g. `yolo26s.pt`) are git-ignored and auto-downloaded
