@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_motorbikes/
 ├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --debug-dump)
+├── cli.py                 # CLI argument parser (--backfill, --debug-dump, --scooter)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -15,6 +15,7 @@ src/lakeside_motorbikes/
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
+│   ├── scooter_detector.py # Experimental: person tracking + centroid displacement
 │   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
@@ -39,6 +40,7 @@ cp .env.example .env  # then fill in credentials
 python -m lakeside_motorbikes              # live monitoring (polls every 120s)
 python -m lakeside_motorbikes --backfill   # analyze past 24 hours
 python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
+python -m lakeside_motorbikes --scooter --backfill --debug-dump  # experimental scooter detection
 ```
 
 Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
@@ -46,7 +48,7 @@ Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
 ## Testing
 
 ```bash
-pytest tests/                    # 44 tests across 8 modules
+pytest tests/                    # 94 tests across 9 modules
 pytest tests/ -v --cov=src/lakeside_motorbikes
 ```
 
@@ -71,6 +73,8 @@ See `.env.example` for the full list. Key variables:
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
 - `FPS_SAMPLE` (default 2) - frames extracted per second of video
+- `SCOOTER_FPS_SAMPLE` (default 4), `SCOOTER_DISPLACEMENT_THRESHOLD` (default 40.0) - scooter mode
+- `SCOOTER_PERSON_CONFIDENCE` (default 0.4), `SCOOTER_MAX_MATCH_DISTANCE` (default 200.0) - scooter tracking
 - `POLL_INTERVAL_SECONDS` (default 120)
 
 ## Conventions

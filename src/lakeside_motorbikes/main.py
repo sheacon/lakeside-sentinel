@@ -13,6 +13,8 @@ from lakeside_motorbikes.camera.models import CameraEvent
 from lakeside_motorbikes.camera.nest_api import NestCameraAPI
 from lakeside_motorbikes.cli import parse_args
 from lakeside_motorbikes.config import Settings
+from lakeside_motorbikes.detection.models import Detection
+from lakeside_motorbikes.detection.scooter_detector import ScooterDetector
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
 from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
@@ -361,6 +363,231 @@ class Monitor:
             print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'=' * 60}\n")
 
+    def backfill_scooter(self, debug_dump: bool = False) -> None:
+        """Backfill with experimental scooter detection (person tracking)."""
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(hours=24)
+
+        print(f"\n{'=' * 60}")
+        print("  SCOOTER BACKFILL (experimental) — Last 24 hours")
+        print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
+        print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
+        print()
+        _print_settings(self._settings)
+        print(f"{'=' * 60}\n")
+
+        scooter_detector = ScooterDetector(
+            model_name=self._settings.yolo_model,
+            person_confidence=self._settings.scooter_person_confidence,
+            displacement_threshold=self._settings.scooter_displacement_threshold,
+            max_match_distance=self._settings.scooter_max_match_distance,
+            batch_size=self._settings.yolo_batch_size,
+        )
+
+        print("[1/4] Fetching event list from Nest API...", flush=True)
+        events = self._api.get_events(start, now)
+        total_events = len(events)
+        events = self._filter_daylight(events)
+        filtered = total_events - len(events)
+        print(f"       Found {total_events} events", end="")
+        if filtered:
+            print(f" ({filtered} nighttime filtered)")
+        else:
+            print()
+        print()
+
+        if not events:
+            print("No events to process.")
+            return
+
+        dump_dir: Path | None = None
+        if debug_dump:
+            dump_dir = Path("output") / "backfill-scooter"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            print(f"[dump] Saving clips to: {dump_dir.resolve()}\n")
+
+        print("[2/4] Downloading clips...")
+        clips: list[tuple[int, bytes]] = []
+        download_errors = 0
+        total_bytes = 0
+        cached_count = 0
+        for i, event in enumerate(events):
+            local_time = event.start_time.astimezone()
+            label = local_time.strftime("%H:%M:%S")
+
+            if dump_dir is not None:
+                filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                filepath = dump_dir / filename
+                if filepath.exists():
+                    mp4_bytes = filepath.read_bytes()
+                    total_bytes += len(mp4_bytes)
+                    clips.append((i, mp4_bytes))
+                    cached_count += 1
+                    size_mb = len(mp4_bytes) / 1_000_000
+                    print(
+                        f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB (cached)",
+                        flush=True,
+                    )
+                    continue
+
+            try:
+                mp4_bytes = self._api.download_clip(event)
+                if not mp4_bytes:
+                    print(f"  [{i + 1:3d}/{len(events)}] {label} — empty clip (skipped)")
+                    download_errors += 1
+                    continue
+                total_bytes += len(mp4_bytes)
+                clips.append((i, mp4_bytes))
+                size_mb = len(mp4_bytes) / 1_000_000
+                dur = event.duration.total_seconds()
+                print(
+                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB ({dur:.0f}s)",
+                    flush=True,
+                )
+
+                if dump_dir is not None:
+                    filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                    (dump_dir / filename).write_bytes(mp4_bytes)
+            except Exception as e:
+                print(f"  [{i + 1:3d}/{len(events)}] {label} — ERROR: {e}")
+                download_errors += 1
+
+        total_mb = total_bytes / 1_000_000
+        downloaded = len(clips) - cached_count
+        print(
+            f"\n       {downloaded} downloaded, {cached_count} cached"
+            f" — {len(clips)}/{len(events)} clips ({total_mb:.1f} MB total)"
+        )
+        if download_errors:
+            print(f"       {download_errors} download errors")
+        print()
+
+        fps = self._settings.scooter_fps_sample
+        print(f"[3/4] Analyzing frames for scooter motion (fps={fps})...")
+        detection_count = 0
+        total_frames = 0
+        collected_detections: list[tuple[np.ndarray, float, str, datetime]] = []
+        clip_reports: list[ClipReport] = []
+        for idx, (event_i, mp4_bytes) in enumerate(clips):
+            event = events[event_i]
+            local_time = event.start_time.astimezone()
+            label = local_time.strftime("%H:%M:%S")
+
+            frames = extract_frames(mp4_bytes, fps_sample=fps)
+            frames = crop_to_roi(
+                frames,
+                y_start=self._settings.roi_y_start,
+                y_end=self._settings.roi_y_end,
+                x_start=self._settings.roi_x_start,
+                x_end=self._settings.roi_x_end,
+            )
+            total_frames += len(frames)
+            if not frames:
+                print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
+                if debug_dump:
+                    mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                    clip_reports.append(
+                        ClipReport(
+                            event_time=event.start_time,
+                            mp4_filename=mp4_fn,
+                            best_detection=None,
+                            class_detections={},
+                        )
+                    )
+                continue
+
+            tracks = scooter_detector.detect_all_tracks(frames)
+            detection = scooter_detector.detect(frames)
+
+            if debug_dump:
+                # Log all track displacements for threshold tuning
+                for t_idx, track in enumerate(tracks):
+                    disp = track.displacement_per_interval
+                    pts = len(track.points)
+                    logger.info(
+                        "  Track %d: %d points, displacement=%.1f px/interval",
+                        t_idx,
+                        pts,
+                        disp,
+                    )
+
+                mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                # Build class_detections with the scooter detection if present
+                class_dets: dict[str, Detection] = {}
+                if detection:
+                    class_dets["Scooter"] = detection
+                clip_reports.append(
+                    ClipReport(
+                        event_time=event.start_time,
+                        mp4_filename=mp4_fn,
+                        best_detection=detection,
+                        class_detections=class_dets,
+                    )
+                )
+
+            track_info = ""
+            if tracks:
+                displacements = [t.displacement_per_interval for t in tracks]
+                max_disp = max(displacements)
+                track_info = f" — {len(tracks)} tracks (max disp: {max_disp:.1f})"
+
+            if detection is None:
+                print(
+                    f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames"
+                    f" — no scooter{track_info}",
+                    flush=True,
+                )
+                continue
+
+            detection_count += 1
+            print(
+                f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
+                f"SCOOTER (confidence: {detection.confidence:.0%}){track_info}",
+                flush=True,
+            )
+
+            cropped = crop_to_bbox(
+                detection.frame,
+                detection.bbox,
+                padding=self._settings.crop_padding,
+            )
+            collected_detections.append(
+                (cropped, detection.confidence, detection.class_name, event.start_time)
+            )
+
+        report_path: Path | None = None
+
+        if debug_dump and dump_dir is not None:
+            print("\n[4/4] Generating HTML report...")
+            report_path = generate_report(
+                clip_reports,
+                dump_dir,
+                crop_padding=self._settings.crop_padding,
+            )
+            print(f"       Report: {report_path.resolve()}")
+            webbrowser.open(report_path.resolve().as_uri())
+        else:
+            print("\n[4/4] Sending summary email...")
+            email_id = self._email.send_backfill_summary(collected_detections)
+            if email_id:
+                print(f"       Email sent ({email_id})")
+            elif collected_detections:
+                print("       Email FAILED")
+            else:
+                print("       No detections — no email sent")
+
+        print(f"\n{'=' * 60}")
+        print("  SCOOTER BACKFILL COMPLETE")
+        print(f"  Events:     {len(events)}")
+        print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
+        print(f"  Frames:     {total_frames} analyzed (fps={fps})")
+        print(f"  Detections: {detection_count}")
+        if report_path:
+            print(f"  Report:     {report_path.resolve()}")
+        if dump_dir is not None:
+            print(f"  Clips:      {dump_dir.resolve()}")
+        print(f"{'=' * 60}\n")
+
     def run_live(self) -> None:
         """Start the live monitor with scheduled polling."""
         logger.info("Starting live monitor (poll every %ds)", self._settings.poll_interval_seconds)
@@ -387,7 +614,9 @@ def main() -> None:
 
     monitor = Monitor(settings)
 
-    if args.backfill:
+    if args.scooter and args.backfill:
+        monitor.backfill_scooter(debug_dump=args.debug_dump)
+    elif args.backfill:
         monitor.backfill(debug_dump=args.debug_dump)
     else:
         monitor.run_live()

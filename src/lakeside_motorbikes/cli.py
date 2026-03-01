@@ -15,4 +15,9 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Backfill mode: save all MP4 clips to a timestamped folder for manual inspection.",
     )
+    parser.add_argument(
+        "--scooter",
+        action="store_true",
+        help="Experimental: detect fast-moving people (scooter riders) via motion tracking.",
+    )
     return parser.parse_args()
