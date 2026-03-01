@@ -246,13 +246,22 @@ class Monitor:
                 print(f"  [{idx+1:3d}/{len(clips)}] {label} — no frames extracted")
                 continue
 
-            detection = self._detector.detect_best(frames)
+            if debug_dump:
+                detection, class_max = self._detector.detect_detailed(frames)
+            else:
+                detection = self._detector.detect_best(frames)
+
             if detection is None:
                 print(
                     f"  [{idx+1:3d}/{len(clips)}] {label}"
                     f" — {len(frames):2d} frames — no vehicle",
                     flush=True,
                 )
+                if debug_dump and class_max:
+                    breakdown = "  ".join(
+                        f"{name}: {conf:.0%}" for name, conf in sorted(class_max.items())
+                    )
+                    print(f"            {breakdown}")
                 continue
 
             detection_count += 1
@@ -261,6 +270,11 @@ class Monitor:
                 f"{detection.class_name.upper()} (confidence: {detection.confidence:.0%})",
                 flush=True,
             )
+            if debug_dump:
+                breakdown = "  ".join(
+                    f"{name}: {conf:.0%}" for name, conf in sorted(class_max.items())
+                )
+                print(f"            {breakdown}")
 
             cropped = crop_to_bbox(
                 detection.frame,

@@ -113,6 +113,66 @@ class TestVehicleDetector:
         assert detection.class_name == "Truck"
 
     @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_detailed_no_frames_returns_none_and_empty_dict(
+        self, mock_yolo_cls: MagicMock
+    ) -> None:
+        detector = VehicleDetector()
+        detection, class_max = detector.detect_detailed([])
+        assert detection is None
+        assert class_max == {}
+
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_detailed_returns_best_and_per_class_max(
+        self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        box_car = _make_mock_box(cls=2, conf=0.82, xyxy=[10, 10, 50, 50])
+        box_bike = _make_mock_box(cls=1, conf=0.31, xyxy=[60, 60, 120, 120])
+        box_moto = _make_mock_box(cls=3, conf=0.12, xyxy=[200, 200, 300, 300])
+
+        result1 = _make_mock_result([box_car, box_bike])
+        result2 = _make_mock_result([box_moto])
+        mock_yolo_cls.return_value.return_value = [result1, result2]
+
+        detector = VehicleDetector(confidence_threshold=0.4)
+        detection, class_max = detector.detect_detailed([dummy_frame, dummy_frame])
+
+        assert detection is not None
+        assert detection.class_name == "Car"
+        assert detection.confidence == 0.82
+        assert class_max == {"Car": 0.82, "Bicycle": 0.31, "Motorcycle": 0.12}
+
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_detailed_no_vehicles_returns_empty_dict(
+        self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        box_person = _make_mock_box(cls=0, conf=0.95, xyxy=[10, 10, 100, 100])
+        mock_yolo_cls.return_value.return_value = [_make_mock_result([box_person])]
+
+        detector = VehicleDetector()
+        detection, class_max = detector.detect_detailed([dummy_frame])
+        assert detection is None
+        assert class_max == {}
+
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_detailed_includes_sub_threshold_in_breakdown(
+        self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        box_car_high = _make_mock_box(cls=2, conf=0.7, xyxy=[10, 10, 50, 50])
+        box_truck_low = _make_mock_box(cls=7, conf=0.15, xyxy=[60, 60, 120, 120])
+        mock_yolo_cls.return_value.return_value = [
+            _make_mock_result([box_car_high, box_truck_low])
+        ]
+
+        detector = VehicleDetector(confidence_threshold=0.4)
+        detection, class_max = detector.detect_detailed([dummy_frame])
+
+        # Best detection is only above-threshold
+        assert detection is not None
+        assert detection.class_name == "Car"
+        # But class_max includes the sub-threshold truck
+        assert class_max == {"Car": 0.7, "Truck": 0.15}
+
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
     def test_returns_highest_confidence_across_types(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
