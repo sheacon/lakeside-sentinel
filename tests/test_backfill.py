@@ -25,6 +25,8 @@ def mock_settings() -> Settings:
         resend_api_key="re_test",
         alert_email_to="to@example.com",
         alert_email_from="from@example.com",
+        camera_latitude=51.5074,
+        camera_longitude=-0.1278,
     )
 
 

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     yolo_confidence_threshold: float = 0.4
     crop_padding: float = 0.2
 
+    # Camera location (for daylight filtering)
+    camera_latitude: float
+    camera_longitude: float
+
     # Frame sampling
     fps_sample: int = 2
 

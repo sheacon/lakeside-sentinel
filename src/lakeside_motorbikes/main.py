@@ -14,6 +14,7 @@ from lakeside_motorbikes.cli import parse_args
 from lakeside_motorbikes.config import Settings
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
+from lakeside_motorbikes.utils.daylight import is_daylight
 from lakeside_motorbikes.utils.image import crop_to_bbox
 from lakeside_motorbikes.utils.video import extract_frames
 
@@ -42,6 +43,26 @@ class Monitor:
         )
         self._processed_events: set[str] = set()
         self._last_poll_time: datetime = datetime.now(timezone.utc)
+
+    def _filter_daylight(self, events: list[CameraEvent]) -> list[CameraEvent]:
+        """Filter events to only those occurring during daylight hours."""
+        daylight_events = [
+            e
+            for e in events
+            if is_daylight(
+                e.start_time,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+        ]
+        filtered = len(events) - len(daylight_events)
+        if filtered:
+            logger.info(
+                "Filtered %d nighttime events (%d remaining)",
+                filtered,
+                len(daylight_events),
+            )
+        return daylight_events
 
     def process_event(self, event: CameraEvent) -> bool:
         """Process a single camera event. Returns True if a vehicle was detected."""
@@ -94,6 +115,7 @@ class Monitor:
             logger.exception("Failed to fetch events")
             return
 
+        events = self._filter_daylight(events)
         new_events = [e for e in events if e.event_id not in self._processed_events]
         logger.info("Found %d new events (of %d total)", len(new_events), len(events))
 
@@ -117,7 +139,15 @@ class Monitor:
 
         print("[1/4] Fetching event list from Nest API...", flush=True)
         events = self._api.get_events(start, now)
-        print(f"       Found {len(events)} events\n")
+        total_events = len(events)
+        events = self._filter_daylight(events)
+        filtered = total_events - len(events)
+        print(f"       Found {total_events} events", end="")
+        if filtered:
+            print(f" ({filtered} nighttime filtered)")
+        else:
+            print()
+        print()
 
         if not events:
             print("No events to process.")
