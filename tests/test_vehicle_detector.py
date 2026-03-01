@@ -194,6 +194,38 @@ class TestVehicleDetector:
         assert batch_sizes == [8, 8, 4]
 
 
+class TestEmptyMpsCache:
+    @patch("lakeside_motorbikes.detection.vehicle_detector.torch")
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_calls_empty_cache_on_mps(
+        self, mock_yolo_cls: MagicMock, mock_torch: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        mock_torch.backends.mps.is_available.return_value = True
+
+        box = _make_mock_box(cls=3, conf=0.8, xyxy=[10, 10, 100, 100])
+        mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
+
+        detector = VehicleDetector(confidence_threshold=0.4)
+        detector.detect_best([dummy_frame])
+
+        mock_torch.mps.empty_cache.assert_called_once()
+
+    @patch("lakeside_motorbikes.detection.vehicle_detector.torch")
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_skips_empty_cache_on_cpu(
+        self, mock_yolo_cls: MagicMock, mock_torch: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        mock_torch.backends.mps.is_available.return_value = False
+
+        box = _make_mock_box(cls=3, conf=0.8, xyxy=[10, 10, 100, 100])
+        mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
+
+        detector = VehicleDetector(confidence_threshold=0.4)
+        detector.detect_best([dummy_frame])
+
+        mock_torch.mps.empty_cache.assert_not_called()
+
+
 class TestComputeImgsz:
     def test_square_frame(self) -> None:
         h, w = VehicleDetector._compute_imgsz((640, 640, 3))

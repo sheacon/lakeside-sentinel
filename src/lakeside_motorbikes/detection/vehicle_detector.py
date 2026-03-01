@@ -50,6 +50,11 @@ class VehicleDetector:
         target_width = max(32, round(target_width / 32) * 32)
         return (target_height, target_width)
 
+    def _empty_mps_cache(self) -> None:
+        """Release unused MPS GPU memory back to the OS (no-op on CPU)."""
+        if self._device == "mps":
+            torch.mps.empty_cache()
+
     def _run_batched(
         self, frames: list[np.ndarray], imgsz: tuple[int, int], **kwargs: Any
     ) -> Iterator[tuple[np.ndarray, Any]]:
@@ -63,6 +68,7 @@ class VehicleDetector:
         Yields:
             (frame, result) tuples for each frame.
         """
+        self._empty_mps_cache()
         for i in range(0, len(frames), self._batch_size):
             batch = frames[i : i + self._batch_size]
             results = self._model(batch, verbose=False, imgsz=imgsz, device=self._device, **kwargs)
