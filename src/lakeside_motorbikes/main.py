@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import logging
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import numpy as np
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from lakeside_motorbikes.camera.auth import NestAuth
@@ -10,7 +12,7 @@ from lakeside_motorbikes.camera.models import CameraEvent
 from lakeside_motorbikes.camera.nest_api import NestCameraAPI
 from lakeside_motorbikes.cli import parse_args
 from lakeside_motorbikes.config import Settings
-from lakeside_motorbikes.detection.yolo_detector import MotorcycleDetector
+from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
 from lakeside_motorbikes.utils.image import crop_to_bbox
 from lakeside_motorbikes.utils.video import extract_frames
@@ -30,7 +32,7 @@ class Monitor:
         self._settings = settings
         self._auth = NestAuth(settings.google_master_token, settings.google_username)
         self._api = NestCameraAPI(self._auth, settings.nest_device_id)
-        self._detector = MotorcycleDetector(
+        self._detector = VehicleDetector(
             confidence_threshold=settings.yolo_confidence_threshold,
         )
         self._email = EmailSender(
@@ -42,7 +44,7 @@ class Monitor:
         self._last_poll_time: datetime = datetime.now(timezone.utc)
 
     def process_event(self, event: CameraEvent) -> bool:
-        """Process a single camera event. Returns True if a motorbike was detected."""
+        """Process a single camera event. Returns True if a vehicle was detected."""
         logger.info(
             "Processing event: %s (duration: %s)",
             event.start_time.isoformat(),
@@ -61,7 +63,7 @@ class Monitor:
 
         detection = self._detector.detect_best(frames)
         if detection is None:
-            logger.info("No motorcycle in event %s", event.event_id)
+            logger.info("No vehicle in event %s", event.event_id)
             return False
 
         cropped = crop_to_bbox(
@@ -74,6 +76,7 @@ class Monitor:
             cropped_image=cropped,
             confidence=detection.confidence,
             event_time=event.start_time,
+            class_name=detection.class_name,
         )
         return True
 
@@ -107,7 +110,7 @@ class Monitor:
         start = now - timedelta(hours=24)
 
         print(f"\n{'='*60}")
-        print(f"  BACKFILL — Last 24 hours")
+        print("  BACKFILL — Last 24 hours")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"{'='*60}\n")
@@ -126,7 +129,7 @@ class Monitor:
             dump_dir.mkdir(parents=True, exist_ok=True)
             print(f"[dump] Saving clips to: {dump_dir.resolve()}\n")
 
-        print(f"[2/4] Downloading clips...")
+        print("[2/4] Downloading clips...")
         clips: list[tuple[int, bytes]] = []
         download_errors = 0
         total_bytes = 0
@@ -142,7 +145,12 @@ class Monitor:
                 total_bytes += len(mp4_bytes)
                 clips.append((i, mp4_bytes))
                 size_mb = len(mp4_bytes) / 1_000_000
-                print(f"  [{i+1:3d}/{len(events)}] {label} — {size_mb:.1f} MB ({event.duration.total_seconds():.0f}s)", flush=True)
+                dur = event.duration.total_seconds()
+                print(
+                    f"  [{i+1:3d}/{len(events)}] {label}"
+                    f" — {size_mb:.1f} MB ({dur:.0f}s)",
+                    flush=True,
+                )
 
                 if dump_dir is not None:
                     filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
@@ -157,10 +165,10 @@ class Monitor:
             print(f"       {download_errors} download errors")
         print()
 
-        print(f"[3/4] Analyzing frames with YOLO...")
-        detections = 0
-        emails_sent = 0
+        print("[3/4] Analyzing frames with YOLO...")
+        detection_count = 0
         total_frames = 0
+        collected_detections: list[tuple["np.ndarray", float, str, datetime]] = []
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
@@ -174,13 +182,17 @@ class Monitor:
 
             detection = self._detector.detect_best(frames)
             if detection is None:
-                print(f"  [{idx+1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — no motorcycle", flush=True)
+                print(
+                    f"  [{idx+1:3d}/{len(clips)}] {label}"
+                    f" — {len(frames):2d} frames — no vehicle",
+                    flush=True,
+                )
                 continue
 
-            detections += 1
+            detection_count += 1
             print(
                 f"  [{idx+1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
-                f"MOTORCYCLE (confidence: {detection.confidence:.0%})",
+                f"{detection.class_name.upper()} (confidence: {detection.confidence:.0%})",
                 flush=True,
             )
 
@@ -190,24 +202,26 @@ class Monitor:
                 padding=self._settings.crop_padding,
             )
 
-            result = self._email.send_alert(
-                cropped_image=cropped,
-                confidence=detection.confidence,
-                event_time=event.start_time,
+            collected_detections.append(
+                (cropped, detection.confidence, detection.class_name, event.start_time)
             )
-            if result:
-                emails_sent += 1
-                print(f"         → Email sent ({result})")
-            else:
-                print(f"         → Email FAILED")
+
+        print("\n[4/4] Sending summary email...")
+        email_id = self._email.send_backfill_summary(collected_detections)
+        if email_id:
+            print(f"       Email sent ({email_id})")
+        elif collected_detections:
+            print("       Email FAILED")
+        else:
+            print("       No detections — no email sent")
 
         print(f"\n{'='*60}")
-        print(f"  BACKFILL COMPLETE")
+        print("  BACKFILL COMPLETE")
         print(f"  Events:     {len(events)}")
         print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
         print(f"  Frames:     {total_frames} analyzed")
-        print(f"  Detections: {detections}")
-        print(f"  Emails:     {emails_sent} sent")
+        print(f"  Detections: {detection_count}")
+        print(f"  Email:      {'sent' if email_id else 'none'}")
         if dump_dir is not None:
             print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'='*60}\n")
