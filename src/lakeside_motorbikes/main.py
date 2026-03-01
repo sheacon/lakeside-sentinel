@@ -101,7 +101,7 @@ class Monitor:
             except Exception:
                 logger.exception("Error processing event %s", event.event_id)
 
-    def backfill(self) -> None:
+    def backfill(self, debug_dump: bool = False) -> None:
         """Download and analyze all events from the past 24 hours."""
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=24)
@@ -111,15 +111,49 @@ class Monitor:
         events = self._api.get_events(start, now)
         logger.info("Backfill: found %d events", len(events))
 
-        output_dir = Path("output")
-        output_dir.mkdir(exist_ok=True)
+        dump_dir: Path | None = None
+        if debug_dump:
+            dump_dir = Path("output") / f"debug_{now.strftime('%Y%m%d_%H%M%S')}"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Debug dump: saving clips to %s", dump_dir)
 
         detections = 0
         for i, event in enumerate(events, 1):
             logger.info("Backfill: processing event %d/%d", i, len(events))
             try:
-                if self.process_event(event):
-                    detections += 1
+                mp4_bytes = self._api.download_clip(event)
+                if not mp4_bytes:
+                    logger.warning("Empty clip for event %s", event.event_id)
+                    continue
+
+                if dump_dir is not None:
+                    local_time = event.start_time.astimezone()
+                    filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                    (dump_dir / filename).write_bytes(mp4_bytes)
+                    logger.info("  Saved %s (%d bytes)", filename, len(mp4_bytes))
+
+                frames = extract_frames(mp4_bytes)
+                if not frames:
+                    logger.warning("No frames extracted for event %s", event.event_id)
+                    continue
+
+                detection = self._detector.detect_best(frames)
+                if detection is None:
+                    logger.info("No motorcycle in event %s", event.event_id)
+                    continue
+
+                detections += 1
+                cropped = crop_to_bbox(
+                    detection.frame,
+                    detection.bbox,
+                    padding=self._settings.crop_padding,
+                )
+
+                self._email.send_alert(
+                    cropped_image=cropped,
+                    confidence=detection.confidence,
+                    event_time=event.start_time,
+                )
             except Exception:
                 logger.exception("Error processing event %s", event.event_id)
 
@@ -128,6 +162,8 @@ class Monitor:
             len(events),
             detections,
         )
+        if dump_dir is not None:
+            logger.info("Clips saved to: %s", dump_dir.resolve())
 
     def run_live(self) -> None:
         """Start the live monitor with scheduled polling."""
@@ -158,7 +194,7 @@ def main() -> None:
     monitor = Monitor(settings)
 
     if args.backfill:
-        monitor.backfill()
+        monitor.backfill(debug_dump=args.debug_dump)
     else:
         monitor.run_live()
 
