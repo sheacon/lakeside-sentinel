@@ -27,6 +27,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
+
+
+def _print_settings(settings: Settings) -> None:
+    """Print all settings, masking sensitive values."""
+    for name, value in settings.model_dump().items():
+        if any(kw in name for kw in _SENSITIVE_KEYWORDS):
+            display = "****"
+        else:
+            display = value
+        label = name.replace("_", " ").title()
+        print(f"  {label + ':':<28} {display}")
+
 
 class Monitor:
     """Orchestrates the detection pipeline."""
@@ -143,22 +156,12 @@ class Monitor:
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=24)
 
-        s = self._settings
         print(f"\n{'=' * 60}")
         print("  BACKFILL — Last 24 hours")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print()
-        print(f"  Model:       {s.yolo_model}")
-        print(f"  Device:      {self._detector._device}")
-        print(f"  Confidence:  {s.yolo_confidence_threshold}")
-        print(f"  ROI Y:       {s.roi_y_start}–{s.roi_y_end}")
-        print(f"  ROI X:       {s.roi_x_start}–{s.roi_x_end}")
-        print(f"  FPS sample:  {s.fps_sample}")
-        print(f"  Crop padding:{s.crop_padding}")
-        print(f"  Location:    {s.camera_latitude}, {s.camera_longitude}")
-        print(f"  Poll:        {s.poll_interval_seconds}s")
-        print(f"  Alert to:    {s.alert_email_to}")
+        _print_settings(self._settings)
         print(f"{'=' * 60}\n")
 
         print("[1/4] Fetching event list from Nest API...", flush=True)

@@ -6,7 +6,7 @@ import pytest
 
 from lakeside_motorbikes.camera.models import CameraEvent
 from lakeside_motorbikes.config import Settings
-from lakeside_motorbikes.main import Monitor
+from lakeside_motorbikes.main import Monitor, _print_settings
 
 
 def _make_event(hour: int = 12) -> CameraEvent:
@@ -28,6 +28,35 @@ def mock_settings() -> Settings:
         camera_latitude=51.5074,
         camera_longitude=-0.1278,
     )
+
+
+class TestPrintSettings:
+    def test_prints_all_settings_fields(
+        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _print_settings(mock_settings)
+        output = capsys.readouterr().out
+        for field_name in Settings.model_fields:
+            label = field_name.replace("_", " ").title()
+            assert label in output
+
+    def test_masks_sensitive_values(
+        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _print_settings(mock_settings)
+        output = capsys.readouterr().out
+        assert mock_settings.google_master_token not in output
+        assert mock_settings.resend_api_key not in output
+        assert "****" in output
+
+    def test_shows_non_sensitive_values(
+        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _print_settings(mock_settings)
+        output = capsys.readouterr().out
+        assert str(mock_settings.yolo_model) in output
+        assert str(mock_settings.fps_sample) in output
+        assert mock_settings.alert_email_to in output
 
 
 class TestBackfillCache:
