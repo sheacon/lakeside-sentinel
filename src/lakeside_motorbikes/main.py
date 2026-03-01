@@ -37,6 +37,7 @@ class Monitor:
         self._detector = VehicleDetector(
             model_name=settings.yolo_model,
             confidence_threshold=settings.yolo_confidence_threshold,
+            batch_size=settings.yolo_batch_size,
         )
         self._email = EmailSender(
             api_key=settings.resend_api_key,

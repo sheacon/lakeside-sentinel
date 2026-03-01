@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 import torch
@@ -17,9 +19,15 @@ VEHICLE_CLASSES: dict[int, str] = {
 class VehicleDetector:
     """Detects vehicles in frames using YOLO."""
 
-    def __init__(self, model_name: str = "yolo26s.pt", confidence_threshold: float = 0.4) -> None:
+    def __init__(
+        self,
+        model_name: str = "yolo26s.pt",
+        confidence_threshold: float = 0.4,
+        batch_size: int = 16,
+    ) -> None:
         self._model = YOLO(model_name)
         self._confidence_threshold = confidence_threshold
+        self._batch_size = batch_size
         self._device = "mps" if torch.backends.mps.is_available() else "cpu"
         logger.info("YOLO device: %s", self._device)
 
@@ -42,6 +50,24 @@ class VehicleDetector:
         target_width = max(32, round(target_width / 32) * 32)
         return (target_height, target_width)
 
+    def _run_batched(
+        self, frames: list[np.ndarray], imgsz: tuple[int, int], **kwargs: Any
+    ) -> Iterator[tuple[np.ndarray, Any]]:
+        """Run YOLO inference in batches to avoid MPS OOM on large frame lists.
+
+        Args:
+            frames: List of BGR frames.
+            imgsz: (height, width) for YOLO inference.
+            **kwargs: Additional arguments passed to the YOLO model.
+
+        Yields:
+            (frame, result) tuples for each frame.
+        """
+        for i in range(0, len(frames), self._batch_size):
+            batch = frames[i : i + self._batch_size]
+            results = self._model(batch, verbose=False, imgsz=imgsz, device=self._device, **kwargs)
+            yield from zip(batch, results)
+
     def detect_best(self, frames: list[np.ndarray]) -> Detection | None:
         """Run detection on all frames and return the single best vehicle detection.
 
@@ -57,9 +83,7 @@ class VehicleDetector:
         best: Detection | None = None
         imgsz = self._compute_imgsz(frames[0].shape)
 
-        results = self._model(frames, verbose=False, imgsz=imgsz, device=self._device)
-
-        for frame, result in zip(frames, results):
+        for frame, result in self._run_batched(frames, imgsz):
             for box in result.boxes:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])
@@ -106,9 +130,7 @@ class VehicleDetector:
 
         # Use a very low YOLO conf so we capture sub-threshold detections
         # for the per-class breakdown (useful for tuning).
-        results = self._model(frames, verbose=False, conf=0.01, imgsz=imgsz, device=self._device)
-
-        for frame, result in zip(frames, results):
+        for frame, result in self._run_batched(frames, imgsz, conf=0.01):
             for box in result.boxes:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])

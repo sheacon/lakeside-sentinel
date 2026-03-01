@@ -166,6 +166,34 @@ class TestVehicleDetector:
         assert detection.class_name == "Motorcycle"
 
 
+    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    def test_batched_inference_splits_frames(
+        self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
+    ) -> None:
+        """20 frames with batch_size=8 should call _model 3 times (8+8+4)."""
+        box = _make_mock_box(cls=3, conf=0.85, xyxy=[10, 10, 100, 100])
+        mock_model = mock_yolo_cls.return_value
+        mock_model.return_value = [_make_mock_result([box])]
+
+        # Make _model return one result per frame in each batch
+        def side_effect(frames: list, **kwargs: object) -> list:
+            return [_make_mock_result([box]) for _ in frames]
+
+        mock_model.side_effect = side_effect
+
+        detector = VehicleDetector(confidence_threshold=0.4, batch_size=8)
+        frames = [dummy_frame] * 20
+        detection = detector.detect_best(frames)
+
+        assert detection is not None
+        assert detection.confidence == 0.85
+        assert detection.class_name == "Motorcycle"
+        assert mock_model.call_count == 3
+        # Verify batch sizes: 8, 8, 4
+        batch_sizes = [len(call.args[0]) for call in mock_model.call_args_list]
+        assert batch_sizes == [8, 8, 4]
+
+
 class TestComputeImgsz:
     def test_square_frame(self) -> None:
         h, w = VehicleDetector._compute_imgsz((640, 640, 3))

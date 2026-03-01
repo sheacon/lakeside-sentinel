@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Detection
     yolo_model: str = "yolo26s.pt"
     yolo_confidence_threshold: float = 0.4
+    yolo_batch_size: int = 16
     crop_padding: float = 0.2
 
     # Region of Interest (fraction 0.0–1.0)
