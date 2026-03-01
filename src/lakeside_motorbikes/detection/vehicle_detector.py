@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 from lakeside_motorbikes.detection.models import Detection
@@ -19,6 +20,8 @@ class VehicleDetector:
     def __init__(self, model_name: str = "yolo26s.pt", confidence_threshold: float = 0.4) -> None:
         self._model = YOLO(model_name)
         self._confidence_threshold = confidence_threshold
+        self._device = "mps" if torch.backends.mps.is_available() else "cpu"
+        logger.info("YOLO device: %s", self._device)
 
     @staticmethod
     def _compute_imgsz(frame_shape: tuple[int, ...], target_width: int = 1280) -> tuple[int, int]:
@@ -54,7 +57,7 @@ class VehicleDetector:
         best: Detection | None = None
         imgsz = self._compute_imgsz(frames[0].shape)
 
-        results = self._model(frames, verbose=False, imgsz=imgsz)
+        results = self._model(frames, verbose=False, imgsz=imgsz, device=self._device)
 
         for frame, result in zip(frames, results):
             for box in result.boxes:
@@ -103,7 +106,7 @@ class VehicleDetector:
 
         # Use a very low YOLO conf so we capture sub-threshold detections
         # for the per-class breakdown (useful for tuning).
-        results = self._model(frames, verbose=False, conf=0.01, imgsz=imgsz)
+        results = self._model(frames, verbose=False, conf=0.01, imgsz=imgsz, device=self._device)
 
         for frame, result in zip(frames, results):
             for box in result.boxes:

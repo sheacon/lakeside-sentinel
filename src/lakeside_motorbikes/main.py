@@ -148,6 +148,7 @@ class Monitor:
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print()
         print(f"  Model:       {s.yolo_model}")
+        print(f"  Device:      {self._detector._device}")
         print(f"  Confidence:  {s.yolo_confidence_threshold}")
         print(f"  ROI Y:       {s.roi_y_start}–{s.roi_y_end}")
         print(f"  ROI X:       {s.roi_x_start}–{s.roi_x_end}")
