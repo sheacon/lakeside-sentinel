@@ -83,7 +83,9 @@ class VehicleDetector:
         best: Detection | None = None
         class_max: dict[str, float] = {}
 
-        results = self._model(frames, verbose=False)
+        # Use a very low YOLO conf so we capture sub-threshold detections
+        # for the per-class breakdown (useful for tuning).
+        results = self._model(frames, verbose=False, conf=0.01)
 
         for frame, result in zip(frames, results):
             for box in result.boxes:
