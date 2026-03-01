@@ -31,6 +31,7 @@ def mock_settings() -> Settings:
 
 
 class TestBackfillCache:
+    @patch("lakeside_motorbikes.main.webbrowser.open")
     @patch("lakeside_motorbikes.main.NestCameraAPI")
     @patch("lakeside_motorbikes.main.NestAuth")
     @patch("lakeside_motorbikes.main.VehicleDetector")
@@ -41,6 +42,7 @@ class TestBackfillCache:
         mock_detector_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
         mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -68,6 +70,7 @@ class TestBackfillCache:
         # download_clip should NOT have been called since the file was cached
         mock_api.download_clip.assert_not_called()
 
+    @patch("lakeside_motorbikes.main.webbrowser.open")
     @patch("lakeside_motorbikes.main.NestCameraAPI")
     @patch("lakeside_motorbikes.main.NestAuth")
     @patch("lakeside_motorbikes.main.VehicleDetector")
@@ -78,6 +81,7 @@ class TestBackfillCache:
         mock_detector_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
         mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,

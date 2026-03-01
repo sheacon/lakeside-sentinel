@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import webbrowser
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -332,6 +333,7 @@ class Monitor:
                 crop_padding=self._settings.crop_padding,
             )
             print(f"       Report: {report_path.resolve()}")
+            webbrowser.open(report_path.resolve().as_uri())
         else:
             print("\n[4/4] Sending summary email...")
             email_id = self._email.send_backfill_summary(collected_detections)

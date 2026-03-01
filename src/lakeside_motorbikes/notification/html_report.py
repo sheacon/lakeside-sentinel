@@ -54,11 +54,30 @@ def generate_report(
     Returns:
         Path to the generated report.html file.
     """
+    # Filter out clips where no class meets the minimum threshold
+    min_threshold = 0.01
+    filtered_reports = [
+        r
+        for r in clip_reports
+        if any(d.confidence >= min_threshold for d in r.class_detections.values())
+    ]
+
+    # Sort by motorcycle confidence (highest first), then bicycle confidence
+    def _sort_key(r: ClipReport) -> tuple[float, float]:
+        moto = r.class_detections.get("motorcycle")
+        bike = r.class_detections.get("bicycle")
+        return (
+            moto.confidence if moto is not None else 0.0,
+            bike.confidence if bike is not None else 0.0,
+        )
+
+    filtered_reports.sort(key=_sort_key, reverse=True)
+
     total_clips = len(clip_reports)
-    detected_clips = sum(1 for r in clip_reports if r.best_detection is not None)
+    detected_clips = len(filtered_reports)
 
     sections: list[str] = []
-    for report in clip_reports:
+    for report in filtered_reports:
         local_time = report.event_time.astimezone()
         time_str = local_time.strftime("%H:%M:%S")
         has_detection = report.best_detection is not None
@@ -128,7 +147,7 @@ def generate_report(
         "</style></head><body>"
         "<h1>Backfill Debug Report</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
-        f"{detected_clips} with detections</p>" + "".join(sections) + "</body></html>"
+        f"{detected_clips} with detections (sorted by motorcycle confidence)</p>" + "".join(sections) + "</body></html>"
     )
 
     output_path = output_dir / "report.html"
