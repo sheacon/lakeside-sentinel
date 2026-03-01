@@ -18,7 +18,7 @@ class _MultiServiceAuth(glocaltokens.client.GLocalAuthenticationTokens):
         if (
             self.access_token is not None
             and self._last_service == service
-            and not self.access_token_expired
+            and not self._has_expired(self.access_token_date, glocaltokens.client.ACCESS_TOKEN_DURATION)
         ):
             return self.access_token
 
