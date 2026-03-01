@@ -36,10 +36,10 @@ class TestParseEvents:
         expected_end = datetime(2026, 2, 28, 10, 6, 15, 500000, tzinfo=timezone.utc)
         assert events[1].end_time == expected_end
 
-    def test_long_event_capped_at_one_minute(self, sample_dashmanifest_xml: bytes) -> None:
+    def test_long_event_preserves_full_duration(self, sample_dashmanifest_xml: bytes) -> None:
         events = _parse_events(sample_dashmanifest_xml)
-        # Third event has duration PT2M30S but should be capped to 1 minute
-        assert events[2].duration == timedelta(minutes=1)
+        # Third event has duration PT2M30S and should be preserved in full
+        assert events[2].duration == timedelta(minutes=2, seconds=30)
 
     def test_event_ids_are_unique(self, sample_dashmanifest_xml: bytes) -> None:
         events = _parse_events(sample_dashmanifest_xml)

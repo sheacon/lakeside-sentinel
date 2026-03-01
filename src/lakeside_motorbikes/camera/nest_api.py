@@ -1,6 +1,6 @@
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import httpx
 import isodate
@@ -14,8 +14,6 @@ BASE_URL = "https://nest-camera-frontend.googleapis.com"
 EVENTS_PATH = "/dashmanifest/namespace/nest-phoenix-prod/device/{device_id}"
 CLIP_PATH = "/mp4clip/namespace/nest-phoenix-prod/device/{device_id}"
 MPD_NS = "{urn:mpeg:dash:schema:mpd:2011}"
-
-MAX_EVENT_DURATION = timedelta(minutes=1)
 
 
 class NestCameraAPI:
@@ -76,7 +74,7 @@ def _parse_events(xml_bytes: bytes) -> list[CameraEvent]:
             continue
 
         start = datetime.fromisoformat(attrib["programDateTime"])
-        duration = min(MAX_EVENT_DURATION, isodate.parse_duration(attrib["duration"]))
+        duration = isodate.parse_duration(attrib["duration"])
 
         events.append(CameraEvent(start_time=start, duration=duration))
 
