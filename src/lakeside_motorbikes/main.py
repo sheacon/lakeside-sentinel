@@ -35,6 +35,7 @@ class Monitor:
         self._auth = NestAuth(settings.google_master_token, settings.google_username)
         self._api = NestCameraAPI(self._auth, settings.nest_device_id)
         self._detector = VehicleDetector(
+            model_name=settings.yolo_model,
             confidence_threshold=settings.yolo_confidence_threshold,
         )
         self._email = EmailSender(
@@ -87,6 +88,8 @@ class Monitor:
             frames,
             y_start=self._settings.roi_y_start,
             y_end=self._settings.roi_y_end,
+            x_start=self._settings.roi_x_start,
+            x_end=self._settings.roi_x_end,
         )
 
         detection = self._detector.detect_best(frames)
@@ -138,11 +141,11 @@ class Monitor:
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=24)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  BACKFILL — Last 24 hours")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         print("[1/4] Fetching event list from Nest API...", flush=True)
         events = self._api.get_events(start, now)
@@ -185,8 +188,7 @@ class Monitor:
                     cached_count += 1
                     size_mb = len(mp4_bytes) / 1_000_000
                     print(
-                        f"  [{i+1:3d}/{len(events)}] {label}"
-                        f" — {size_mb:.1f} MB (cached)",
+                        f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB (cached)",
                         flush=True,
                     )
                     continue
@@ -194,10 +196,7 @@ class Monitor:
             try:
                 mp4_bytes = self._api.download_clip(event)
                 if not mp4_bytes:
-                    print(
-                        f"  [{i+1:3d}/{len(events)}] {label}"
-                        " — empty clip (skipped)"
-                    )
+                    print(f"  [{i + 1:3d}/{len(events)}] {label} — empty clip (skipped)")
                     download_errors += 1
                     continue
                 total_bytes += len(mp4_bytes)
@@ -205,8 +204,7 @@ class Monitor:
                 size_mb = len(mp4_bytes) / 1_000_000
                 dur = event.duration.total_seconds()
                 print(
-                    f"  [{i+1:3d}/{len(events)}] {label}"
-                    f" — {size_mb:.1f} MB ({dur:.0f}s)",
+                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB ({dur:.0f}s)",
                     flush=True,
                 )
 
@@ -214,7 +212,7 @@ class Monitor:
                     filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                     (dump_dir / filename).write_bytes(mp4_bytes)
             except Exception as e:
-                print(f"  [{i+1:3d}/{len(events)}] {label} — ERROR: {e}")
+                print(f"  [{i + 1:3d}/{len(events)}] {label} — ERROR: {e}")
                 download_errors += 1
 
         total_mb = total_bytes / 1_000_000
@@ -242,10 +240,12 @@ class Monitor:
                 frames,
                 y_start=self._settings.roi_y_start,
                 y_end=self._settings.roi_y_end,
+                x_start=self._settings.roi_x_start,
+                x_end=self._settings.roi_x_end,
             )
             total_frames += len(frames)
             if not frames:
-                print(f"  [{idx+1:3d}/{len(clips)}] {label} — no frames extracted")
+                print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
                 if debug_dump:
                     mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                     clip_reports.append(
@@ -276,28 +276,25 @@ class Monitor:
 
             if detection is None:
                 print(
-                    f"  [{idx+1:3d}/{len(clips)}] {label}"
-                    f" — {len(frames):2d} frames — no vehicle",
+                    f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — no vehicle",
                     flush=True,
                 )
                 if debug_dump and class_best:
                     breakdown = "  ".join(
-                        f"{name}: {det.confidence:.0%}"
-                        for name, det in sorted(class_best.items())
+                        f"{name}: {det.confidence:.0%}" for name, det in sorted(class_best.items())
                     )
                     print(f"            {breakdown}")
                 continue
 
             detection_count += 1
             print(
-                f"  [{idx+1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
+                f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
                 f"{detection.class_name.upper()} (confidence: {detection.confidence:.0%})",
                 flush=True,
             )
             if debug_dump:
                 breakdown = "  ".join(
-                    f"{name}: {det.confidence:.0%}"
-                    for name, det in sorted(class_best.items())
+                    f"{name}: {det.confidence:.0%}" for name, det in sorted(class_best.items())
                 )
                 print(f"            {breakdown}")
 
@@ -332,7 +329,7 @@ class Monitor:
             else:
                 print("       No detections — no email sent")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("  BACKFILL COMPLETE")
         print(f"  Events:     {len(events)}")
         print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
@@ -344,13 +341,11 @@ class Monitor:
             print(f"  Email:      {'sent' if email_id else 'none'}")
         if dump_dir is not None:
             print(f"  Clips:      {dump_dir.resolve()}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
     def run_live(self) -> None:
         """Start the live monitor with scheduled polling."""
-        logger.info(
-            "Starting live monitor (poll every %ds)", self._settings.poll_interval_seconds
-        )
+        logger.info("Starting live monitor (poll every %ds)", self._settings.poll_interval_seconds)
 
         # Run an initial poll immediately
         self.poll()

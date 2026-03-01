@@ -60,3 +60,24 @@ class TestCropToRoi:
         assert len(result) == 5
         for r in result:
             assert r.shape == (200, 640, 3)
+
+    def test_horizontal_crop(self) -> None:
+        frames = [np.zeros((480, 640, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, x_start=0.25, x_end=0.75)
+        assert result[0].shape == (480, 320, 3)
+
+    def test_combined_x_and_y_crop(self) -> None:
+        frames = [np.zeros((400, 800, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, y_start=0.0, y_end=0.5, x_start=0.25, x_end=0.75)
+        assert result[0].shape == (200, 400, 3)
+
+    def test_horizontal_only_does_not_short_circuit(self) -> None:
+        frames = [np.zeros((300, 600, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, x_start=0.0, x_end=0.5)
+        assert result is not frames
+        assert result[0].shape == (300, 300, 3)
+
+    def test_all_defaults_short_circuits(self) -> None:
+        frames = [np.zeros((480, 640, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, y_start=0.0, y_end=1.0, x_start=0.0, x_end=1.0)
+        assert result is frames

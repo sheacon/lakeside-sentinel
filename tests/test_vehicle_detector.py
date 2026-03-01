@@ -54,9 +54,7 @@ class TestVehicleDetector:
         assert detector.detect_best([dummy_frame]) is None
 
     @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
-    def test_detects_motorcycle(
-        self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
-    ) -> None:
+    def test_detects_motorcycle(self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray) -> None:
         box = _make_mock_box(cls=3, conf=0.75, xyxy=[50, 50, 200, 200])
         mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
 
@@ -113,9 +111,7 @@ class TestVehicleDetector:
         assert detection.class_name == "Truck"
 
     @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
-    def test_detailed_no_frames_returns_none_and_empty_dict(
-        self, mock_yolo_cls: MagicMock
-    ) -> None:
+    def test_detailed_no_frames_returns_none_and_empty_dict(self, mock_yolo_cls: MagicMock) -> None:
         detector = VehicleDetector()
         detection, class_max = detector.detect_detailed([])
         assert detection is None
@@ -162,9 +158,7 @@ class TestVehicleDetector:
     ) -> None:
         box_car_high = _make_mock_box(cls=2, conf=0.7, xyxy=[10, 10, 50, 50])
         box_truck_low = _make_mock_box(cls=7, conf=0.15, xyxy=[60, 60, 120, 120])
-        mock_yolo_cls.return_value.return_value = [
-            _make_mock_result([box_car_high, box_truck_low])
-        ]
+        mock_yolo_cls.return_value.return_value = [_make_mock_result([box_car_high, box_truck_low])]
 
         detector = VehicleDetector(confidence_threshold=0.4)
         detection, class_best = detector.detect_detailed([dummy_frame])
@@ -195,3 +189,30 @@ class TestVehicleDetector:
         assert detection.confidence == 0.9
         assert detection.bbox == (100, 100, 300, 300)
         assert detection.class_name == "Motorcycle"
+
+
+class TestComputeImgsz:
+    def test_square_frame(self) -> None:
+        h, w = VehicleDetector._compute_imgsz((640, 640, 3))
+        assert h == w == 1280
+        assert h % 32 == 0
+
+    def test_wide_frame_preserves_aspect(self) -> None:
+        # 1920x360 strip (top-third ROI of 1080p)
+        h, w = VehicleDetector._compute_imgsz((360, 1920, 3))
+        assert w == 1280
+        assert h % 32 == 0
+        # Aspect ratio should be roughly preserved
+        expected_h = int(1280 * (360 / 1920))  # 240
+        assert abs(h - expected_h) <= 16  # within one rounding step
+
+    def test_results_are_multiples_of_32(self) -> None:
+        h, w = VehicleDetector._compute_imgsz((100, 700, 3))
+        assert h % 32 == 0
+        assert w % 32 == 0
+
+    def test_custom_target_width(self) -> None:
+        h, w = VehicleDetector._compute_imgsz((480, 640, 3), target_width=640)
+        assert w == 640
+        assert h == 480
+        assert h % 32 == 0

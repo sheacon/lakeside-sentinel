@@ -19,9 +19,28 @@ VEHICLE_CLASSES: dict[int, str] = {
 class VehicleDetector:
     """Detects vehicles in frames using YOLO."""
 
-    def __init__(self, model_name: str = "yolo11n.pt", confidence_threshold: float = 0.4) -> None:
+    def __init__(self, model_name: str = "yolo11s.pt", confidence_threshold: float = 0.4) -> None:
         self._model = YOLO(model_name)
         self._confidence_threshold = confidence_threshold
+
+    @staticmethod
+    def _compute_imgsz(frame_shape: tuple[int, ...], target_width: int = 1280) -> tuple[int, int]:
+        """Compute YOLO imgsz that preserves the frame's aspect ratio.
+
+        Args:
+            frame_shape: Shape of the input frame (h, w, ...).
+            target_width: Desired width for inference.
+
+        Returns:
+            (height, width) tuple, both rounded to nearest multiple of 32.
+        """
+        h, w = frame_shape[:2]
+        aspect = h / w
+        target_height = int(target_width * aspect)
+        # Round to nearest multiple of 32
+        target_height = max(32, round(target_height / 32) * 32)
+        target_width = max(32, round(target_width / 32) * 32)
+        return (target_height, target_width)
 
     def detect_best(self, frames: list[np.ndarray]) -> Detection | None:
         """Run detection on all frames and return the single best vehicle detection.
@@ -36,8 +55,9 @@ class VehicleDetector:
             return None
 
         best: Detection | None = None
+        imgsz = self._compute_imgsz(frames[0].shape)
 
-        results = self._model(frames, verbose=False)
+        results = self._model(frames, verbose=False, imgsz=imgsz)
 
         for frame, result in zip(frames, results):
             for box in result.boxes:
@@ -82,10 +102,11 @@ class VehicleDetector:
 
         best: Detection | None = None
         class_best: dict[str, Detection] = {}
+        imgsz = self._compute_imgsz(frames[0].shape)
 
         # Use a very low YOLO conf so we capture sub-threshold detections
         # for the per-class breakdown (useful for tuning).
-        results = self._model(frames, verbose=False, conf=0.01)
+        results = self._model(frames, verbose=False, conf=0.01, imgsz=imgsz)
 
         for frame, result in zip(frames, results):
             for box in result.boxes:

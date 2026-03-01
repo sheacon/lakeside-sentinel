@@ -105,9 +105,9 @@ def generate_report(
         sections.append(
             f'<div style="border-left:4px solid {border_color};background:{bg_color};'
             f'padding:12px 16px;margin-bottom:16px;border-radius:0 8px 8px 0">'
-            f"<h3 style=\"margin:0 0 8px\">{time_str} &mdash; "
+            f'<h3 style="margin:0 0 8px">{time_str} &mdash; '
             f'<code style="font-size:0.85em">{report.mp4_filename}</code></h3>'
-            f"<p style=\"margin:4px 0\">{best_str}</p>"
+            f'<p style="margin:4px 0">{best_str}</p>'
             f'<video controls preload="metadata" style="max-width:100%;max-height:300px;'
             f'border-radius:6px;margin-top:6px">'
             f'<source src="{report.mp4_filename}" type="video/mp4" />'
@@ -128,9 +128,7 @@ def generate_report(
         "</style></head><body>"
         "<h1>Backfill Debug Report</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
-        f"{detected_clips} with detections</p>"
-        + "".join(sections)
-        + "</body></html>"
+        f"{detected_clips} with detections</p>" + "".join(sections) + "</body></html>"
     )
 
     output_path = output_dir / "report.html"

@@ -29,9 +29,7 @@ class NestCameraAPI:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._auth.get_access_token()}"}
 
-    def get_events(
-        self, start_time: datetime, end_time: datetime
-    ) -> list[CameraEvent]:
+    def get_events(self, start_time: datetime, end_time: datetime) -> list[CameraEvent]:
         """Fetch camera events from the dashmanifest endpoint."""
         url = BASE_URL + EVENTS_PATH.format(device_id=self._device_id)
         params = {

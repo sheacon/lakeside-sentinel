@@ -1,6 +1,5 @@
 import logging
 import tempfile
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -47,5 +46,10 @@ def _read_frames(path: str, fps_sample: int) -> list[np.ndarray]:
         frame_idx += 1
 
     cap.release()
-    logger.debug("Extracted %d frames from video (%d total, interval=%d)", len(frames), frame_idx, frame_interval)
+    logger.debug(
+        "Extracted %d frames from video (%d total, interval=%d)",
+        len(frames),
+        frame_idx,
+        frame_interval,
+    )
     return frames
