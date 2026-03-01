@@ -131,9 +131,7 @@ class TestVehicleDetector:
     ) -> None:
         box_moto_high = _make_mock_box(cls=3, conf=0.7, xyxy=[10, 10, 50, 50])
         box_bike_low = _make_mock_box(cls=1, conf=0.15, xyxy=[60, 60, 120, 120])
-        mock_yolo_cls.return_value.return_value = [
-            _make_mock_result([box_moto_high, box_bike_low])
-        ]
+        mock_yolo_cls.return_value.return_value = [_make_mock_result([box_moto_high, box_bike_low])]
 
         detector = VehicleDetector(confidence_threshold=0.4)
         detection, class_best = detector.detect_detailed([dummy_frame])
@@ -164,7 +162,6 @@ class TestVehicleDetector:
         assert detection.confidence == 0.9
         assert detection.bbox == (100, 100, 300, 300)
         assert detection.class_name == "Motorcycle"
-
 
     @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
     def test_batched_inference_splits_frames(

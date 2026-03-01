@@ -112,13 +112,13 @@ class TestGenerateReport:
         assert "2 with detections" in html
 
     def test_sorted_by_motorcycle_confidence(self, tmp_path: Path) -> None:
-        low = _make_detection("motorcycle", 0.3)
-        high = _make_detection("motorcycle", 0.9)
-        mid = _make_detection("motorcycle", 0.6)
+        low = _make_detection("Motorcycle", 0.3)
+        high = _make_detection("Motorcycle", 0.9)
+        mid = _make_detection("Motorcycle", 0.6)
         reports = [
-            _make_clip_report(hour=10, best=low, class_detections={"motorcycle": low}),
-            _make_clip_report(hour=11, best=high, class_detections={"motorcycle": high}),
-            _make_clip_report(hour=12, best=mid, class_detections={"motorcycle": mid}),
+            _make_clip_report(hour=10, best=low, class_detections={"Motorcycle": low}),
+            _make_clip_report(hour=11, best=high, class_detections={"Motorcycle": high}),
+            _make_clip_report(hour=12, best=mid, class_detections={"Motorcycle": mid}),
         ]
         path = generate_report(reports, tmp_path)
         html = path.read_text()
@@ -129,26 +129,26 @@ class TestGenerateReport:
         assert pos_90 < pos_60 < pos_30
 
     def test_non_motorcycle_clips_sorted_after_motorcycle(self, tmp_path: Path) -> None:
-        moto = _make_detection("motorcycle", 0.4)
-        bike = _make_detection("bicycle", 0.9)
+        moto = _make_detection("Motorcycle", 0.4)
+        bike = _make_detection("Bicycle", 0.9)
         reports = [
-            _make_clip_report(hour=10, best=bike, class_detections={"bicycle": bike}),
-            _make_clip_report(hour=11, best=moto, class_detections={"motorcycle": moto}),
+            _make_clip_report(hour=10, best=bike, class_detections={"Bicycle": bike}),
+            _make_clip_report(hour=11, best=moto, class_detections={"Motorcycle": moto}),
         ]
         path = generate_report(reports, tmp_path)
         html = path.read_text()
         # Motorcycle clip (hour=11) should appear before bicycle-only clip (hour=10)
-        pos_moto = html.index("motorcycle")
-        pos_bike = html.index("bicycle")
+        pos_moto = html.index("Motorcycle")
+        pos_bike = html.index("Bicycle")
         assert pos_moto < pos_bike
 
     def test_secondary_sort_by_bicycle(self, tmp_path: Path) -> None:
         """When motorcycle confidence is equal, sort by bicycle confidence."""
-        bike_high = _make_detection("bicycle", 0.8)
-        bike_low = _make_detection("bicycle", 0.3)
+        bike_high = _make_detection("Bicycle", 0.8)
+        bike_low = _make_detection("Bicycle", 0.3)
         reports = [
-            _make_clip_report(hour=10, best=bike_low, class_detections={"bicycle": bike_low}),
-            _make_clip_report(hour=11, best=bike_high, class_detections={"bicycle": bike_high}),
+            _make_clip_report(hour=10, best=bike_low, class_detections={"Bicycle": bike_low}),
+            _make_clip_report(hour=11, best=bike_high, class_detections={"Bicycle": bike_high}),
         ]
         path = generate_report(reports, tmp_path)
         html = path.read_text()

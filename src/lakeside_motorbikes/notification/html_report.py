@@ -64,8 +64,8 @@ def generate_report(
 
     # Sort by motorcycle confidence (highest first), then bicycle confidence
     def _sort_key(r: ClipReport) -> tuple[float, float]:
-        moto = r.class_detections.get("motorcycle")
-        bike = r.class_detections.get("bicycle")
+        moto = r.class_detections.get("Motorcycle")
+        bike = r.class_detections.get("Bicycle")
         return (
             moto.confidence if moto is not None else 0.0,
             bike.confidence if bike is not None else 0.0,
@@ -147,7 +147,9 @@ def generate_report(
         "</style></head><body>"
         "<h1>Backfill Debug Report</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
-        f"{detected_clips} with detections (sorted by motorcycle confidence)</p>" + "".join(sections) + "</body></html>"
+        f"{detected_clips} with detections (sorted by motorcycle confidence)</p>"
+        + "".join(sections)
+        + "</body></html>"
     )
 
     output_path = output_dir / "report.html"
