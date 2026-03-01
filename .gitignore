@@ -19,6 +19,7 @@ htmlcov/
 
 *.mp4
 *.avi
+*.pt
 output/
 
 .DS_Store
