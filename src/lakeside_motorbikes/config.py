@@ -18,5 +18,8 @@ class Settings(BaseSettings):
     yolo_confidence_threshold: float = 0.4
     crop_padding: float = 0.2
 
+    # Frame sampling
+    fps_sample: int = 2
+
     # Polling
     poll_interval_seconds: int = 120

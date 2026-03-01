@@ -56,7 +56,7 @@ class Monitor:
             logger.warning("Empty clip for event %s", event.event_id)
             return False
 
-        frames = extract_frames(mp4_bytes)
+        frames = extract_frames(mp4_bytes, fps_sample=self._settings.fps_sample)
         if not frames:
             logger.warning("No frames extracted for event %s", event.event_id)
             return False
@@ -174,7 +174,7 @@ class Monitor:
             local_time = event.start_time.astimezone()
             label = local_time.strftime("%H:%M:%S")
 
-            frames = extract_frames(mp4_bytes)
+            frames = extract_frames(mp4_bytes, fps_sample=self._settings.fps_sample)
             total_frames += len(frames)
             if not frames:
                 print(f"  [{idx+1:3d}/{len(clips)}] {label} — no frames extracted")

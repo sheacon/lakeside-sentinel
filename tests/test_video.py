@@ -39,6 +39,12 @@ class TestExtractFrames:
         frames = extract_frames(mp4, fps_sample=1)
         assert frames[0].shape == (240, 320, 3)
 
+    def test_extracts_two_frames_per_second(self) -> None:
+        # 90 frames at 30fps = 3 seconds → expect 6 frames at 2fps
+        mp4 = _create_test_mp4(num_frames=90, fps=30.0)
+        frames = extract_frames(mp4, fps_sample=2)
+        assert len(frames) == 6
+
     def test_empty_bytes_returns_empty_list(self) -> None:
         frames = extract_frames(b"not a video")
         assert frames == []
