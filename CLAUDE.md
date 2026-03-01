@@ -1,6 +1,6 @@
 # Lakeside Motorbikes
 
-Vehicle detection and alert system that monitors a Google Nest camera using YOLO object detection and sends email alerts via Resend. Detects bicycles, cars, motorcycles, buses, and trucks.
+Vehicle detection and alert system that monitors a Google Nest camera using YOLO object detection and sends email alerts via Resend. Detects bicycles and motorcycles.
 
 ## Architecture
 
@@ -15,7 +15,7 @@ src/lakeside_motorbikes/
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
-│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,2,3,5,7), dynamic imgsz
+│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
 └── utils/

@@ -9,10 +9,7 @@ logger = logging.getLogger(__name__)
 
 VEHICLE_CLASSES: dict[int, str] = {
     1: "Bicycle",
-    2: "Car",
     3: "Motorcycle",
-    5: "Bus",
-    7: "Truck",
 }
 
 
