@@ -1,6 +1,33 @@
 import numpy as np
 
 
+def crop_to_roi(
+    frames: list[np.ndarray],
+    y_start: float = 0.0,
+    y_end: float = 1.0,
+) -> list[np.ndarray]:
+    """Crop frames to a vertical region of interest.
+
+    Args:
+        frames: List of BGR images as numpy arrays.
+        y_start: Fraction (0.0–1.0) for the top of the ROI.
+        y_end: Fraction (0.0–1.0) for the bottom of the ROI.
+
+    Returns:
+        List of cropped frames.
+    """
+    if y_start == 0.0 and y_end == 1.0:
+        return frames
+
+    cropped: list[np.ndarray] = []
+    for frame in frames:
+        h = frame.shape[0]
+        y1 = max(0, int(h * y_start))
+        y2 = min(h, int(h * y_end))
+        cropped.append(frame[y1:y2, :].copy())
+    return cropped
+
+
 def crop_to_bbox(
     frame: np.ndarray,
     bbox: tuple[float, float, float, float],

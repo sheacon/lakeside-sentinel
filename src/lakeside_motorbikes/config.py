@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     yolo_confidence_threshold: float = 0.4
     crop_padding: float = 0.2
 
+    # Region of Interest (fraction 0.0–1.0)
+    roi_y_start: float = 0.0
+    roi_y_end: float = 1.0
+
     # Camera location (for daylight filtering)
     camera_latitude: float
     camera_longitude: float

@@ -15,7 +15,7 @@ from lakeside_motorbikes.config import Settings
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
 from lakeside_motorbikes.utils.daylight import is_daylight
-from lakeside_motorbikes.utils.image import crop_to_bbox
+from lakeside_motorbikes.utils.image import crop_to_bbox, crop_to_roi
 from lakeside_motorbikes.utils.video import extract_frames
 
 logging.basicConfig(
@@ -81,6 +81,12 @@ class Monitor:
         if not frames:
             logger.warning("No frames extracted for event %s", event.event_id)
             return False
+
+        frames = crop_to_roi(
+            frames,
+            y_start=self._settings.roi_y_start,
+            y_end=self._settings.roi_y_end,
+        )
 
         detection = self._detector.detect_best(frames)
         if detection is None:
@@ -230,6 +236,11 @@ class Monitor:
             label = local_time.strftime("%H:%M:%S")
 
             frames = extract_frames(mp4_bytes, fps_sample=self._settings.fps_sample)
+            frames = crop_to_roi(
+                frames,
+                y_start=self._settings.roi_y_start,
+                y_end=self._settings.roi_y_end,
+            )
             total_frames += len(frames)
             if not frames:
                 print(f"  [{idx+1:3d}/{len(clips)}] {label} — no frames extracted")

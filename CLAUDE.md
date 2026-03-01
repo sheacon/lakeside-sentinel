@@ -20,7 +20,7 @@ src/lakeside_motorbikes/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering via astral
-    ├── image.py           # Bounding box cropping with padding
+    ├── image.py           # ROI cropping & bounding box cropping with padding
     └── video.py           # MP4 frame extraction via OpenCV
 ```
 
@@ -67,6 +67,7 @@ See `.env.example` for the full list. Key variables:
 - `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` - email alerts
 - `CAMERA_LATITUDE`, `CAMERA_LONGITUDE` - camera location (daylight filtering)
 - `YOLO_CONFIDENCE_THRESHOLD` (default 0.4), `CROP_PADDING` (default 0.2)
+- `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `FPS_SAMPLE` (default 2) - frames extracted per second of video
 - `POLL_INTERVAL_SECONDS` (default 120)
 

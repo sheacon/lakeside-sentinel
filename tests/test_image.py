@@ -1,6 +1,6 @@
 import numpy as np
 
-from lakeside_motorbikes.utils.image import crop_to_bbox
+from lakeside_motorbikes.utils.image import crop_to_bbox, crop_to_roi
 
 
 class TestCropToBbox:
@@ -29,3 +29,34 @@ class TestCropToBbox:
         cropped = crop_to_bbox(frame, (50, 50, 100, 100), padding=0.0)
         cropped[:] = 255
         assert frame[75, 75, 0] == 0  # original unchanged
+
+
+class TestCropToRoi:
+    def test_crops_to_top_third(self) -> None:
+        frames = [np.zeros((300, 640, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, y_start=0.0, y_end=1 / 3)
+        assert result[0].shape == (100, 640, 3)
+
+    def test_full_frame_with_defaults(self) -> None:
+        frames = [np.zeros((480, 640, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, y_start=0.0, y_end=1.0)
+        assert result is frames  # returns same list, no copy
+
+    def test_clamps_to_valid_bounds(self) -> None:
+        frames = [np.zeros((100, 100, 3), dtype=np.uint8)]
+        result = crop_to_roi(frames, y_start=-0.5, y_end=1.5)
+        assert result[0].shape[0] == 100
+        assert result[0].shape[1] == 100
+
+    def test_returns_copies(self) -> None:
+        frame = np.zeros((200, 200, 3), dtype=np.uint8)
+        result = crop_to_roi([frame], y_start=0.0, y_end=0.5)
+        result[0][:] = 255
+        assert frame[0, 0, 0] == 0  # original unchanged
+
+    def test_multiple_frames(self) -> None:
+        frames = [np.zeros((400, 640, 3), dtype=np.uint8) for _ in range(5)]
+        result = crop_to_roi(frames, y_start=0.25, y_end=0.75)
+        assert len(result) == 5
+        for r in result:
+            assert r.shape == (200, 640, 3)
