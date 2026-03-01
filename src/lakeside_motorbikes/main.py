@@ -14,6 +14,7 @@ from lakeside_motorbikes.cli import parse_args
 from lakeside_motorbikes.config import Settings
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
+from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
 from lakeside_motorbikes.utils.daylight import is_daylight
 from lakeside_motorbikes.utils.image import crop_to_bbox, crop_to_roi
 from lakeside_motorbikes.utils.video import extract_frames
@@ -230,6 +231,7 @@ class Monitor:
         detection_count = 0
         total_frames = 0
         collected_detections: list[tuple["np.ndarray", float, str, datetime]] = []
+        clip_reports: list[ClipReport] = []
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
@@ -244,12 +246,33 @@ class Monitor:
             total_frames += len(frames)
             if not frames:
                 print(f"  [{idx+1:3d}/{len(clips)}] {label} — no frames extracted")
+                if debug_dump:
+                    mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                    clip_reports.append(
+                        ClipReport(
+                            event_time=event.start_time,
+                            mp4_filename=mp4_fn,
+                            best_detection=None,
+                            class_detections={},
+                        )
+                    )
                 continue
 
             if debug_dump:
-                detection, class_max = self._detector.detect_detailed(frames)
+                detection, class_best = self._detector.detect_detailed(frames)
             else:
                 detection = self._detector.detect_best(frames)
+
+            if debug_dump:
+                mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                clip_reports.append(
+                    ClipReport(
+                        event_time=event.start_time,
+                        mp4_filename=mp4_fn,
+                        best_detection=detection,
+                        class_detections=class_best,
+                    )
+                )
 
             if detection is None:
                 print(
@@ -257,9 +280,10 @@ class Monitor:
                     f" — {len(frames):2d} frames — no vehicle",
                     flush=True,
                 )
-                if debug_dump and class_max:
+                if debug_dump and class_best:
                     breakdown = "  ".join(
-                        f"{name}: {conf:.0%}" for name, conf in sorted(class_max.items())
+                        f"{name}: {det.confidence:.0%}"
+                        for name, det in sorted(class_best.items())
                     )
                     print(f"            {breakdown}")
                 continue
@@ -272,7 +296,8 @@ class Monitor:
             )
             if debug_dump:
                 breakdown = "  ".join(
-                    f"{name}: {conf:.0%}" for name, conf in sorted(class_max.items())
+                    f"{name}: {det.confidence:.0%}"
+                    for name, det in sorted(class_best.items())
                 )
                 print(f"            {breakdown}")
 
@@ -286,14 +311,26 @@ class Monitor:
                 (cropped, detection.confidence, detection.class_name, event.start_time)
             )
 
-        print("\n[4/4] Sending summary email...")
-        email_id = self._email.send_backfill_summary(collected_detections)
-        if email_id:
-            print(f"       Email sent ({email_id})")
-        elif collected_detections:
-            print("       Email FAILED")
+        email_id: str | None = None
+        report_path: Path | None = None
+
+        if debug_dump and dump_dir is not None:
+            print("\n[4/4] Generating HTML report...")
+            report_path = generate_report(
+                clip_reports,
+                dump_dir,
+                crop_padding=self._settings.crop_padding,
+            )
+            print(f"       Report: {report_path.resolve()}")
         else:
-            print("       No detections — no email sent")
+            print("\n[4/4] Sending summary email...")
+            email_id = self._email.send_backfill_summary(collected_detections)
+            if email_id:
+                print(f"       Email sent ({email_id})")
+            elif collected_detections:
+                print("       Email FAILED")
+            else:
+                print("       No detections — no email sent")
 
         print(f"\n{'='*60}")
         print("  BACKFILL COMPLETE")
@@ -301,7 +338,10 @@ class Monitor:
         print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
         print(f"  Frames:     {total_frames} analyzed")
         print(f"  Detections: {detection_count}")
-        print(f"  Email:      {'sent' if email_id else 'none'}")
+        if report_path:
+            print(f"  Report:     {report_path.resolve()}")
+        else:
+            print(f"  Email:      {'sent' if email_id else 'none'}")
         if dump_dir is not None:
             print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'='*60}\n")

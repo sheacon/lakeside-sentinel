@@ -65,8 +65,8 @@ class VehicleDetector:
 
     def detect_detailed(
         self, frames: list[np.ndarray]
-    ) -> tuple[Detection | None, dict[str, float]]:
-        """Run detection and return the best vehicle detection plus per-class max confidences.
+    ) -> tuple[Detection | None, dict[str, Detection]]:
+        """Run detection and return the best vehicle detection plus per-class best detections.
 
         Unlike detect_best, the per-class dict includes all vehicle detections regardless
         of the confidence threshold, useful for debugging and tuning.
@@ -75,13 +75,13 @@ class VehicleDetector:
             frames: List of BGR frames.
 
         Returns:
-            Tuple of (best Detection or None, dict mapping class name to max confidence).
+            Tuple of (best Detection or None, dict mapping class name to best Detection).
         """
         if not frames:
             return None, {}
 
         best: Detection | None = None
-        class_max: dict[str, float] = {}
+        class_best: dict[str, Detection] = {}
 
         # Use a very low YOLO conf so we capture sub-threshold detections
         # for the per-class breakdown (useful for tuning).
@@ -96,17 +96,21 @@ class VehicleDetector:
                     continue
 
                 class_name = VEHICLE_CLASSES[cls]
-                class_max[class_name] = max(class_max.get(class_name, 0.0), conf)
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                det = Detection(
+                    frame=frame,
+                    bbox=(x1, y1, x2, y2),
+                    confidence=conf,
+                    class_name=class_name,
+                )
+
+                existing = class_best.get(class_name)
+                if existing is None or conf > existing.confidence:
+                    class_best[class_name] = det
 
                 if conf >= self._confidence_threshold:
                     if best is None or conf > best.confidence:
-                        x1, y1, x2, y2 = box.xyxy[0].tolist()
-                        best = Detection(
-                            frame=frame,
-                            bbox=(x1, y1, x2, y2),
-                            confidence=conf,
-                            class_name=class_name,
-                        )
+                        best = det
 
         if best:
             logger.info(
@@ -115,4 +119,4 @@ class VehicleDetector:
         else:
             logger.debug("No vehicle detected in %d frames", len(frames))
 
-        return best, class_max
+        return best, class_best

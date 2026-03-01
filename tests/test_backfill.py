@@ -52,7 +52,7 @@ class TestBackfillCache:
         mock_api.get_events.return_value = [event]
         mock_api.download_clip.return_value = b"downloaded_data"
 
-        mock_detector_cls.return_value.detect_best.return_value = None
+        mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
         mock_email_cls.return_value.send_backfill_summary.return_value = None
 
         # Pre-populate the cache directory with the expected file
@@ -89,7 +89,7 @@ class TestBackfillCache:
         mock_api.get_events.return_value = [event]
         mock_api.download_clip.return_value = b"fresh_download"
 
-        mock_detector_cls.return_value.detect_best.return_value = None
+        mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
         mock_email_cls.return_value.send_backfill_summary.return_value = None
 
         monitor = Monitor(mock_settings)
