@@ -125,7 +125,7 @@ class Monitor:
 
         dump_dir: Path | None = None
         if debug_dump:
-            dump_dir = Path("output") / f"debug_{now.strftime('%Y%m%d_%H%M%S')}"
+            dump_dir = Path("output") / "backfill"
             dump_dir.mkdir(parents=True, exist_ok=True)
             print(f"[dump] Saving clips to: {dump_dir.resolve()}\n")
 
@@ -133,13 +133,34 @@ class Monitor:
         clips: list[tuple[int, bytes]] = []
         download_errors = 0
         total_bytes = 0
+        cached_count = 0
         for i, event in enumerate(events):
             local_time = event.start_time.astimezone()
             label = local_time.strftime("%H:%M:%S")
+
+            if dump_dir is not None:
+                filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                filepath = dump_dir / filename
+                if filepath.exists():
+                    mp4_bytes = filepath.read_bytes()
+                    total_bytes += len(mp4_bytes)
+                    clips.append((i, mp4_bytes))
+                    cached_count += 1
+                    size_mb = len(mp4_bytes) / 1_000_000
+                    print(
+                        f"  [{i+1:3d}/{len(events)}] {label}"
+                        f" — {size_mb:.1f} MB (cached)",
+                        flush=True,
+                    )
+                    continue
+
             try:
                 mp4_bytes = self._api.download_clip(event)
                 if not mp4_bytes:
-                    print(f"  [{i+1:3d}/{len(events)}] {label} — empty clip (skipped)")
+                    print(
+                        f"  [{i+1:3d}/{len(events)}] {label}"
+                        " — empty clip (skipped)"
+                    )
                     download_errors += 1
                     continue
                 total_bytes += len(mp4_bytes)
@@ -160,7 +181,11 @@ class Monitor:
                 download_errors += 1
 
         total_mb = total_bytes / 1_000_000
-        print(f"\n       Downloaded {len(clips)}/{len(events)} clips ({total_mb:.1f} MB total)")
+        downloaded = len(clips) - cached_count
+        print(
+            f"\n       {downloaded} downloaded, {cached_count} cached"
+            f" — {len(clips)}/{len(events)} clips ({total_mb:.1f} MB total)"
+        )
         if download_errors:
             print(f"       {download_errors} download errors")
         print()
