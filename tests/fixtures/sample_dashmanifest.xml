@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static">
+  <Period programDateTime="2026-02-28T10:00:00.000Z" duration="PT20S" id="event1">
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="1" bandwidth="500000"/>
+    </AdaptationSet>
+  </Period>
+  <Period programDateTime="2026-02-28T10:05:30.500Z" duration="PT45S" id="event2">
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="1" bandwidth="500000"/>
+    </AdaptationSet>
+  </Period>
+  <Period programDateTime="2026-02-28T10:15:00.000Z" duration="PT2M30S" id="event3">
+    <AdaptationSet mimeType="video/mp4">
+      <Representation id="1" bandwidth="500000"/>
+    </AdaptationSet>
+  </Period>
+</MPD>
