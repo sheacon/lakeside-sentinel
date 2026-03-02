@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import webbrowser
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +18,11 @@ from lakeside_motorbikes.detection.scooter_detector import ScooterDetector
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
 from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
-from lakeside_motorbikes.utils.daylight import is_daylight
+from lakeside_motorbikes.utils.daylight import (
+    get_daylight_span,
+    get_daylight_span_for_date,
+    is_daylight,
+)
 from lakeside_motorbikes.utils.image import crop_to_bbox, crop_to_roi
 from lakeside_motorbikes.utils.video import extract_frames
 
@@ -153,13 +157,27 @@ class Monitor:
             except Exception:
                 logger.exception("Error processing event %s", event.event_id)
 
-    def backfill(self, debug_dump: bool = False) -> None:
-        """Download and analyze all events from the past 24 hours."""
-        now = datetime.now(timezone.utc)
-        start = now - timedelta(hours=24)
+    def backfill(self, debug_dump: bool = False, backfill_date: date | None = None) -> None:
+        """Download and analyze events for a daylight period."""
+        if backfill_date is not None:
+            start, end = get_daylight_span_for_date(
+                backfill_date,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+            label = f"BACKFILL — {backfill_date.isoformat()}"
+        else:
+            now = datetime.now(timezone.utc)
+            start, end = get_daylight_span(
+                now,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+            label = "BACKFILL — Most recent daylight"
+        now = end
 
         print(f"\n{'=' * 60}")
-        print("  BACKFILL — Last 24 hours")
+        print(f"  {label}")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print()
@@ -363,13 +381,27 @@ class Monitor:
             print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'=' * 60}\n")
 
-    def backfill_scooter(self, debug_dump: bool = False) -> None:
+    def backfill_scooter(self, debug_dump: bool = False, backfill_date: date | None = None) -> None:
         """Backfill with experimental scooter detection (person tracking)."""
-        now = datetime.now(timezone.utc)
-        start = now - timedelta(hours=24)
+        if backfill_date is not None:
+            start, end = get_daylight_span_for_date(
+                backfill_date,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+            label = f"SCOOTER BACKFILL (experimental) — {backfill_date.isoformat()}"
+        else:
+            now = datetime.now(timezone.utc)
+            start, end = get_daylight_span(
+                now,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+            label = "SCOOTER BACKFILL (experimental) — Most recent daylight"
+        now = end
 
         print(f"\n{'=' * 60}")
-        print("  SCOOTER BACKFILL (experimental) — Last 24 hours")
+        print(f"  {label}")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print()
@@ -612,12 +644,17 @@ def main() -> None:
     args = parse_args()
     settings = Settings()  # type: ignore[call-arg]
 
+    backfill_date: date | None = None
+    if args.date:
+        backfill_date = datetime.strptime(args.date, "%Y-%m-%d").date()
+        args.backfill = True  # --date implies --backfill
+
     monitor = Monitor(settings)
 
     if args.scooter and args.backfill:
-        monitor.backfill_scooter(debug_dump=args.debug_dump)
+        monitor.backfill_scooter(debug_dump=args.debug_dump, backfill_date=backfill_date)
     elif args.backfill:
-        monitor.backfill(debug_dump=args.debug_dump)
+        monitor.backfill(debug_dump=args.debug_dump, backfill_date=backfill_date)
     else:
         monitor.run_live()
 

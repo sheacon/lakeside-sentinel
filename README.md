@@ -9,7 +9,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using [YOL
 ```
 src/lakeside_motorbikes/
 ├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --debug-dump)
+├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -40,8 +40,9 @@ cp .env.example .env  # then fill in credentials
 
 ```bash
 python -m lakeside_motorbikes              # live monitoring (polls every 120s)
-python -m lakeside_motorbikes --backfill   # analyze past 24 hours
+python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
 python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
+python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
 python -m lakeside_motorbikes --scooter --backfill --debug-dump  # experimental scooter detection
 ```
 

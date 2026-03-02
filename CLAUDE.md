@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_motorbikes/
 ├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --debug-dump, --scooter)
+├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump, --scooter)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -20,7 +20,7 @@ src/lakeside_motorbikes/
 ├── notification/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
 └── utils/
-    ├── daylight.py        # Sunrise/sunset filtering via astral
+    ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
     └── video.py           # MP4 frame extraction via OpenCV
 ```
@@ -38,8 +38,9 @@ cp .env.example .env  # then fill in credentials
 
 ```bash
 python -m lakeside_motorbikes              # live monitoring (polls every 120s)
-python -m lakeside_motorbikes --backfill   # analyze past 24 hours
+python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
 python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
+python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
 python -m lakeside_motorbikes --scooter --backfill --debug-dump  # experimental scooter detection
 ```
 

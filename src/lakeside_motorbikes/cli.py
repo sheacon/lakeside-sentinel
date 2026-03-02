@@ -8,7 +8,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--backfill",
         action="store_true",
-        help="Download and analyze all events from the past 24 hours instead of live monitoring.",
+        help="Analyze the most recent daylight period (sunrise-to-sunset).",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Backfill a specific date (YYYY-MM-DD). Analyzes that day's sunrise-to-sunset.",
     )
     parser.add_argument(
         "--debug-dump",
