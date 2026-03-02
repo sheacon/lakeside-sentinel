@@ -315,6 +315,7 @@ class Monitor:
             crop_padding=self._settings.crop_padding,
             include_video=True,
             title="VEH Detection Report",
+            mode="veh",
         )
         report_path = Path("output") / f"report-veh-{date_str}.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -330,6 +331,7 @@ class Monitor:
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
                 title="VEH Detection Report",
+                mode="veh",
             )
             email_id = self._email.send_report(email_html, f"VEH Detection Report — {label}")
             if email_id:
@@ -595,6 +597,7 @@ class Monitor:
             crop_padding=self._settings.crop_padding,
             include_video=True,
             title="HSP Detection Report",
+            mode="hsp",
         )
         report_path = Path("output") / f"report-hsp-{date_str}.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -610,6 +613,7 @@ class Monitor:
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
                 title="HSP Detection Report",
+                mode="hsp",
             )
             email_id = self._email.send_report(email_html, f"HSP Detection Report — {label}")
             if email_id:

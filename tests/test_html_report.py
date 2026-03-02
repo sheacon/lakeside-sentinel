@@ -9,6 +9,7 @@ from lakeside_sentinel.notification.html_report import ClipReport, generate_repo
 def _make_detection(
     class_name: str = "Car",
     confidence: float = 0.85,
+    speed: float | None = None,
 ) -> Detection:
     """Create a Detection with a small dummy frame."""
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -17,6 +18,7 @@ def _make_detection(
         bbox=(10.0, 10.0, 90.0, 90.0),
         confidence=confidence,
         class_name=class_name,
+        speed=speed,
     )
 
 
@@ -192,3 +194,38 @@ class TestGenerateReport:
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
         html = generate_report([report])
         assert "Claude:" not in html
+
+    def test_hsp_sorted_by_speed(self) -> None:
+        slow = _make_detection("HSP", 0.5, speed=160.0)
+        fast = _make_detection("HSP", 0.4, speed=400.0)
+        mid = _make_detection("HSP", 0.6, speed=280.0)
+        reports = [
+            _make_clip_report(hour=10, best=slow, class_detections={"HSP": slow}),
+            _make_clip_report(hour=11, best=fast, class_detections={"HSP": fast}),
+            _make_clip_report(hour=12, best=mid, class_detections={"HSP": mid}),
+        ]
+        html = generate_report(reports, mode="hsp")
+        # 400 px/sec should appear before 280 before 160
+        pos_400 = html.index("400 px/sec")
+        pos_280 = html.index("280 px/sec")
+        pos_160 = html.index("160 px/sec")
+        assert pos_400 < pos_280 < pos_160
+
+    def test_hsp_footer_says_sorted_by_speed(self) -> None:
+        det = _make_detection("HSP", 0.5, speed=300.0)
+        reports = [_make_clip_report(hour=10, best=det, class_detections={"HSP": det})]
+        html = generate_report(reports, mode="hsp")
+        assert "sorted by speed" in html
+        assert "sorted by motorcycle confidence" not in html
+
+    def test_veh_footer_says_sorted_by_motorcycle_confidence(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
+        html = generate_report(reports, mode="veh")
+        assert "sorted by motorcycle confidence" in html
+
+    def test_hsp_card_shows_speed_instead_of_confidence(self) -> None:
+        det = _make_detection("HSP", 0.5, speed=320.0)
+        report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
+        html = generate_report([report], mode="hsp")
+        assert "320 px/sec" in html

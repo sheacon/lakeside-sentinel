@@ -43,6 +43,7 @@ def generate_report(
     crop_padding: float = 0.2,
     include_video: bool = True,
     title: str = "Detection Report",
+    mode: str = "veh",
 ) -> str:
     """Generate a self-contained HTML report.
 
@@ -51,6 +52,7 @@ def generate_report(
         crop_padding: Padding fraction for cropping detection images.
         include_video: Whether to include video player elements.
         title: Title for the HTML report.
+        mode: Detection mode ("veh" or "hsp"). Controls sorting and display.
 
     Returns:
         The generated HTML string.
@@ -58,16 +60,26 @@ def generate_report(
     # Filter out clips with no above-threshold detections
     filtered_reports = [r for r in clip_reports if r.class_detections]
 
-    # Sort by motorcycle confidence (highest first), then bicycle confidence
-    def _sort_key(r: ClipReport) -> tuple[float, float]:
-        moto = r.class_detections.get("Motorcycle")
-        bike = r.class_detections.get("Bicycle")
-        return (
-            moto.confidence if moto is not None else 0.0,
-            bike.confidence if bike is not None else 0.0,
-        )
+    if mode == "hsp":
+        # Sort by HSP speed (highest first)
+        def _hsp_sort_key(r: ClipReport) -> float:
+            hsp = r.class_detections.get("HSP")
+            return hsp.speed if hsp is not None and hsp.speed is not None else 0.0
 
-    filtered_reports.sort(key=_sort_key, reverse=True)
+        filtered_reports.sort(key=_hsp_sort_key, reverse=True)
+        sort_label = "sorted by speed"
+    else:
+        # Sort by motorcycle confidence (highest first), then bicycle confidence
+        def _veh_sort_key(r: ClipReport) -> tuple[float, float]:
+            moto = r.class_detections.get("Motorcycle")
+            bike = r.class_detections.get("Bicycle")
+            return (
+                moto.confidence if moto is not None else 0.0,
+                bike.confidence if bike is not None else 0.0,
+            )
+
+        filtered_reports.sort(key=_veh_sort_key, reverse=True)
+        sort_label = "sorted by motorcycle confidence"
 
     total_clips = len(clip_reports)
     detected_clips = len(filtered_reports)
@@ -90,7 +102,10 @@ def generate_report(
                 reverse=True,
             ):
                 img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding)
-                conf_pct = f"{det.confidence:.0%}"
+                if mode == "hsp" and det.speed is not None:
+                    metric_label = f"{det.speed:.0f} px/sec"
+                else:
+                    metric_label = f"{det.confidence:.0%}"
                 badge_html = ""
                 if det.verification_status == "confirmed":
                     badge_html = (
@@ -106,7 +121,7 @@ def generate_report(
                     badge_html += (
                         '<div style="color:#94a3b8;font-size:0.75em;'
                         'font-style:italic;margin-top:2px">'
-                        f'Claude: &ldquo;{det.verification_response}&rdquo;</div>'
+                        f"Claude: &ldquo;{det.verification_response}&rdquo;</div>"
                     )
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
@@ -114,7 +129,7 @@ def generate_report(
                     f'<img src="{img_uri}" style="max-width:144px;max-height:144px;'
                     f'border-radius:4px;display:block;margin:0 auto 6px" />'
                     f"<strong>{class_name}</strong><br/>"
-                    f'<span style="color:#64748b">{conf_pct}</span>'
+                    f'<span style="color:#64748b">{metric_label}</span>'
                     f"{badge_html}"
                     f"</div>"
                 )
@@ -167,7 +182,7 @@ def generate_report(
         "</style></head><body>"
         f"<h1>{title}</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
-        f"{detected_clips} with detections (sorted by motorcycle confidence)</p>"
+        f"{detected_clips} with detections ({sort_label})</p>"
         + "".join(sections)
         + "</body></html>"
     )

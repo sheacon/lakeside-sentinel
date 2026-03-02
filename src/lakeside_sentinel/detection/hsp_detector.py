@@ -254,4 +254,5 @@ class HSPDetector:
             bbox=best.bbox,
             confidence=best.confidence,
             class_name="HSP",
+            speed=fastest.displacement_per_second(fps),
         )
