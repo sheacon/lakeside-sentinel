@@ -16,6 +16,7 @@ from lakeside_sentinel.utils.image import crop_to_bbox
 logger = logging.getLogger(__name__)
 
 _PRESENT_LABEL = "Potential Motorized Vehicle"
+_SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
 
 @dataclass(frozen=True)
@@ -40,12 +41,35 @@ def _encode_cropped_png(
     return f"data:image/png;base64,{b64}"
 
 
+def _render_settings_html(settings: dict[str, object]) -> str:
+    """Render settings as an HTML details/summary block, masking sensitive values."""
+    rows: list[str] = []
+    for name, value in settings.items():
+        if any(kw in name for kw in _SENSITIVE_KEYWORDS):
+            display = "****"
+        else:
+            display = str(value)
+        label = name.replace("_", " ").title()
+        rows.append(
+            f"<tr><td style='padding:2px 12px 2px 0;color:#64748b'>{label}</td>"
+            f"<td style='padding:2px 0'><code>{display}</code></td></tr>"
+        )
+    return (
+        '<details style="margin-bottom:20px;color:#64748b;font-size:0.85em">'
+        "<summary style='cursor:pointer;font-weight:600'>Parameters</summary>"
+        '<table style="margin-top:8px;border-collapse:collapse">'
+        + "".join(rows)
+        + "</table></details>"
+    )
+
+
 def generate_report(
     clip_reports: list[ClipReport],
     crop_padding: float = 0.2,
     include_video: bool = True,
     title: str = "Detection Report",
     mode: str = "veh",
+    settings: dict[str, object] | None = None,
 ) -> str:
     """Generate a self-contained HTML report.
 
@@ -55,6 +79,7 @@ def generate_report(
         include_video: Whether to include video player elements.
         title: Title for the HTML report.
         mode: Detection mode ("veh", "hsp", or "present"). Controls sorting and display.
+        settings: Optional settings dict to display in debug mode reports.
 
     Returns:
         The generated HTML string.
@@ -195,6 +220,10 @@ def generate_report(
             f"</div>"
         )
 
+    settings_html = ""
+    if settings and not is_present:
+        settings_html = _render_settings_html(settings)
+
     html = (
         "<!DOCTYPE html>"
         '<html lang="en"><head><meta charset="utf-8"/>'
@@ -208,6 +237,7 @@ def generate_report(
         f"<h1>{title}</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
         f"{detected_clips} with detections ({sort_label})</p>"
+        + settings_html
         + "".join(sections)
         + "</body></html>"
     )

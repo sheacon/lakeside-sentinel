@@ -451,12 +451,14 @@ class Monitor:
     ) -> tuple[Path, str | None]:
         """Step 4: Generate HTML report and optionally send email."""
         print("\n[4/4] Generating HTML report...")
+        settings_dict = self._settings.model_dump() if mode != "present" else None
         html = generate_report(
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
             title=title,
             mode=mode,
+            settings=settings_dict,
         )
 
         if mode == "present":
@@ -477,6 +479,7 @@ class Monitor:
                 include_video=False,
                 title=title,
                 mode=mode,
+                settings=settings_dict,
             )
             email_id = self._email.send_report(email_html, f"{title} — {label}")
             if email_id:
