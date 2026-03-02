@@ -35,9 +35,9 @@ class Settings(BaseSettings):
 
     # High-speed person detection (HSP)
     hsp_fps_sample: int = 4
-    hsp_displacement_threshold: float = 60.0
+    hsp_displacement_threshold: float = 240.0
     hsp_person_confidence_threshold: float = 0.4
-    hsp_max_match_distance: float = 200.0
+    hsp_max_match_distance: float = 800.0
 
     # Claude Vision verification (optional)
     anthropic_api_key: str = ""

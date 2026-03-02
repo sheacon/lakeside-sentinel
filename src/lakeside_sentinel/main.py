@@ -388,6 +388,7 @@ class Monitor:
             displacement_threshold=self._settings.hsp_displacement_threshold,
             max_match_distance=self._settings.hsp_max_match_distance,
             batch_size=self._settings.yolo_batch_size,
+            fps_sample=self._settings.hsp_fps_sample,
         )
 
         print("[1/4] Fetching event list from Nest API...", flush=True)
@@ -505,10 +506,10 @@ class Monitor:
 
             # Log all track displacements for threshold tuning
             for t_idx, track in enumerate(tracks):
-                disp = track.displacement_per_interval
+                disp = track.displacement_per_second(fps)
                 pts = len(track.points)
                 logger.info(
-                    "  Track %d: %d points, displacement=%.1f px/interval",
+                    "  Track %d: %d points, displacement=%.1f px/sec",
                     t_idx,
                     pts,
                     disp,
@@ -530,9 +531,9 @@ class Monitor:
 
             track_info = ""
             if tracks:
-                displacements = [t.displacement_per_interval for t in tracks]
+                displacements = [t.displacement_per_second(fps) for t in tracks]
                 max_disp = max(displacements)
-                track_info = f" — {len(tracks)} tracks (max disp: {max_disp:.1f})"
+                track_info = f" — {len(tracks)} tracks (max disp: {max_disp:.1f} px/sec)"
 
             if detection is None:
                 print(

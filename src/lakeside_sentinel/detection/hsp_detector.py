@@ -37,9 +37,11 @@ class PersonTrack:
 
     points: list[TrackPoint] = field(default_factory=list)
 
-    @property
-    def displacement_per_interval(self) -> float:
-        """Average centroid displacement per frame interval.
+    def displacement_per_second(self, fps: int) -> float:
+        """Average centroid displacement per second.
+
+        Args:
+            fps: Frames per second used during extraction.
 
         Returns 0.0 for tracks with fewer than 2 points.
         """
@@ -50,7 +52,7 @@ class PersonTrack:
         dx = last.centroid_x - first.centroid_x
         dy = last.centroid_y - first.centroid_y
         total_displacement = math.sqrt(dx * dx + dy * dy)
-        return total_displacement / (len(self.points) - 1)
+        return (total_displacement / (len(self.points) - 1)) * fps
 
     @property
     def best_point(self) -> TrackPoint:
@@ -65,15 +67,18 @@ class HSPDetector:
         self,
         model_name: str = "yolo26s.pt",
         person_confidence: float = 0.4,
-        displacement_threshold: float = 60.0,
-        max_match_distance: float = 200.0,
+        displacement_threshold: float = 240.0,
+        max_match_distance: float = 800.0,
         batch_size: int = 16,
+        *,
+        fps_sample: int,
     ) -> None:
         self._model = YOLO(model_name)
         self._person_confidence = person_confidence
         self._displacement_threshold = displacement_threshold
         self._max_match_distance = max_match_distance
         self._batch_size = batch_size
+        self._fps_sample = fps_sample
         self._device = "mps" if torch.backends.mps.is_available() else "cpu"
         logger.info("HSPDetector YOLO device: %s", self._device)
 
@@ -153,6 +158,7 @@ class HSPDetector:
         # Build tracks via greedy nearest-centroid matching
         active_tracks: list[PersonTrack] = []
         finished_tracks: list[PersonTrack] = []
+        max_match_distance_per_frame = self._max_match_distance / self._fps_sample
 
         sorted_indices = sorted(frame_detections.keys())
         for frame_idx in sorted_indices:
@@ -163,7 +169,7 @@ class HSPDetector:
             # Try to extend each active track with nearest unmatched point
             for t_idx, track in enumerate(active_tracks):
                 last = track.points[-1]
-                best_dist = self._max_match_distance
+                best_dist = max_match_distance_per_frame
                 best_p_idx: int | None = None
 
                 for p_idx, point in enumerate(points):
@@ -221,11 +227,12 @@ class HSPDetector:
             Detection with class_name="HSP" for the fastest track, or None.
         """
         tracks = self._build_tracks(frames)
+        fps = self._fps_sample
 
         fast_tracks = [
             t
             for t in tracks
-            if len(t.points) >= 2 and t.displacement_per_interval >= self._displacement_threshold
+            if len(t.points) >= 2 and t.displacement_per_second(fps) >= self._displacement_threshold
         ]
 
         if not fast_tracks:
@@ -233,12 +240,12 @@ class HSPDetector:
             return None
 
         # Pick the track with highest displacement
-        fastest = max(fast_tracks, key=lambda t: t.displacement_per_interval)
+        fastest = max(fast_tracks, key=lambda t: t.displacement_per_second(fps))
         best = fastest.best_point
 
         logger.info(
-            "HSP detected: displacement=%.1f px/interval, confidence=%.2f",
-            fastest.displacement_per_interval,
+            "HSP detected: displacement=%.1f px/sec, confidence=%.2f",
+            fastest.displacement_per_second(fps),
             best.confidence,
         )
 

@@ -66,13 +66,13 @@ python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --roi-y-start 0.0 --roi-y-end 0.28 \
     --roi-x-start 0.33 --roi-x-end 1.0
 
-# HSP mode — sweep displacement thresholds and person confidence
+# HSP mode — sweep displacement thresholds (px/sec) and person confidence
 python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --hsp \
     --fps 4 8 \
-    --hsp-displacement 40.0 60.0 80.0 \
+    --hsp-displacement 160.0 240.0 320.0 \
     --hsp-person-confidence 0.3 0.4 \
-    --hsp-max-match-distance 150.0 200.0
+    --hsp-max-match-distance 600.0 800.0
 ```
 
 Annotated images are saved to `output/tune/{clip_stem}/`. Results are printed as a table to stdout.
@@ -122,8 +122,8 @@ See `.env.example` for the full list. Key variables:
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
 - `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
-- `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
-- `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
+- `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 240.0, px/sec) - high-speed person mode
+- `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 800.0, px/sec) - HSP tracking (thresholds are FPS-invariant)
 - `ANTHROPIC_API_KEY` - API key for Claude Vision verification (optional, required for `--claude`)
 - `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
 

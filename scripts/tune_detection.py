@@ -35,9 +35,9 @@ class RunConfig:
     # VEH-specific
     confidence_threshold: float = 0.4
     # HSP-specific
-    hsp_displacement: float = 60.0
+    hsp_displacement: float = 240.0
     hsp_person_confidence_threshold: float = 0.4
-    hsp_max_match_distance: float = 200.0
+    hsp_max_match_distance: float = 800.0
     # ROI (shared, not swept)
     roi_y_start: float = 0.0
     roi_y_end: float = 1.0
@@ -200,6 +200,7 @@ def annotate_hsp_frame(
     frame: np.ndarray,
     tracks: list[PersonTrack],
     displacement_threshold: float,
+    fps: int,
 ) -> np.ndarray:
     """Draw HSP track visualizations on a frame.
 
@@ -211,7 +212,7 @@ def annotate_hsp_frame(
     thickness = 1
 
     for track in tracks:
-        disp = track.displacement_per_interval
+        disp = track.displacement_per_second(fps)
         is_fast = len(track.points) >= 2 and disp >= displacement_threshold
         color = (0, 0, 255) if is_fast else (0, 200, 0)
 
@@ -322,21 +323,23 @@ def run_hsp(
             person_confidence=config.hsp_person_confidence_threshold,
             displacement_threshold=0.0,  # we post-filter
             max_match_distance=config.hsp_max_match_distance,
+            fps_sample=config.fps_sample,
         )
         all_tracks = detector.detect_all_tracks(frames)
         hsp_cache[cache_key] = all_tracks
 
     all_tracks = hsp_cache[cache_key]
 
-    # Post-filter by displacement threshold
+    # Post-filter by displacement threshold (px/sec)
     fast_tracks = [
         t
         for t in all_tracks
-        if len(t.points) >= 2 and t.displacement_per_interval >= config.hsp_displacement
+        if len(t.points) >= 2
+        and t.displacement_per_second(config.fps_sample) >= config.hsp_displacement
     ]
 
     max_disp = max(
-        (t.displacement_per_interval for t in all_tracks if len(t.points) >= 2),
+        (t.displacement_per_second(config.fps_sample) for t in all_tracks if len(t.points) >= 2),
         default=0.0,
     )
 
@@ -466,8 +469,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--hsp-displacement",
         nargs="+",
         type=float,
-        default=[60.0],
-        help="Displacement thresholds to sweep (HSP mode)",
+        default=[240.0],
+        help="Displacement thresholds in px/sec to sweep (HSP mode)",
     )
     parser.add_argument(
         "--hsp-person-confidence",
@@ -480,8 +483,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--hsp-max-match-distance",
         nargs="+",
         type=float,
-        default=[200.0],
-        help="Max match distances to sweep (HSP mode)",
+        default=[800.0],
+        help="Max match distances in px/sec to sweep (HSP mode)",
     )
 
     return parser
@@ -626,9 +629,13 @@ def _run_hsp_sweep(
 
         # Save annotated image showing all tracks
         if result.tracks:
-            best_track = max(result.tracks, key=lambda t: t.displacement_per_interval)
+            best_track = max(
+                result.tracks, key=lambda t: t.displacement_per_second(config.fps_sample)
+            )
             best_point = best_track.best_point
-            annotated = annotate_hsp_frame(best_point.frame, result.tracks, config.hsp_displacement)
+            annotated = annotate_hsp_frame(
+                best_point.frame, result.tracks, config.hsp_displacement, config.fps_sample
+            )
             model_short = config.model_name.replace(".pt", "")
             disp_str = f"{config.hsp_displacement:.0f}"
             filename = (

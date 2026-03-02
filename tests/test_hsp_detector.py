@@ -53,22 +53,22 @@ def dummy_frame() -> np.ndarray:
 class TestPersonTrack:
     def test_single_point_displacement_zero(self) -> None:
         track = PersonTrack(points=[_make_track_point()])
-        assert track.displacement_per_interval == 0.0
+        assert track.displacement_per_second(fps=4) == 0.0
 
     def test_two_points_displacement(self) -> None:
         p1 = _make_track_point(frame_index=0, cx=100.0, cy=100.0)
         p2 = _make_track_point(frame_index=1, cx=130.0, cy=140.0)
         track = PersonTrack(points=[p1, p2])
-        # sqrt(30^2 + 40^2) / 1 = 50.0
-        assert track.displacement_per_interval == 50.0
+        # sqrt(30^2 + 40^2) / 1 interval * 4 fps = 50.0 * 4 = 200.0 px/sec
+        assert track.displacement_per_second(fps=4) == 200.0
 
     def test_multiple_points_average_displacement(self) -> None:
         p1 = _make_track_point(frame_index=0, cx=0.0, cy=0.0)
         p2 = _make_track_point(frame_index=1, cx=10.0, cy=0.0)
         p3 = _make_track_point(frame_index=2, cx=30.0, cy=0.0)
         track = PersonTrack(points=[p1, p2, p3])
-        # sqrt(30^2 + 0^2) / 2 = 15.0
-        assert track.displacement_per_interval == 15.0
+        # sqrt(30^2 + 0^2) / 2 intervals * 4 fps = 15.0 * 4 = 60.0 px/sec
+        assert track.displacement_per_second(fps=4) == 60.0
 
     def test_best_point_returns_highest_confidence(self) -> None:
         p1 = _make_track_point(confidence=0.5)
@@ -79,7 +79,28 @@ class TestPersonTrack:
 
     def test_empty_track_displacement_zero(self) -> None:
         track = PersonTrack(points=[])
-        assert track.displacement_per_interval == 0.0
+        assert track.displacement_per_second(fps=4) == 0.0
+
+    def test_fps_invariance(self) -> None:
+        """Same physical motion at different FPS should yield equal displacement_per_second."""
+        # At 4 FPS: person moves 30px per frame interval over 2 intervals
+        p1_4fps = _make_track_point(frame_index=0, cx=0.0, cy=0.0)
+        p2_4fps = _make_track_point(frame_index=1, cx=30.0, cy=0.0)
+        p3_4fps = _make_track_point(frame_index=2, cx=60.0, cy=0.0)
+        track_4fps = PersonTrack(points=[p1_4fps, p2_4fps, p3_4fps])
+
+        # At 8 FPS: same motion = 15px per frame interval over 4 intervals
+        p1_8fps = _make_track_point(frame_index=0, cx=0.0, cy=0.0)
+        p2_8fps = _make_track_point(frame_index=1, cx=15.0, cy=0.0)
+        p3_8fps = _make_track_point(frame_index=2, cx=30.0, cy=0.0)
+        p4_8fps = _make_track_point(frame_index=3, cx=45.0, cy=0.0)
+        p5_8fps = _make_track_point(frame_index=4, cx=60.0, cy=0.0)
+        track_8fps = PersonTrack(points=[p1_8fps, p2_8fps, p3_8fps, p4_8fps, p5_8fps])
+
+        disp_4fps = track_4fps.displacement_per_second(fps=4)
+        disp_8fps = track_8fps.displacement_per_second(fps=8)
+
+        assert disp_4fps == pytest.approx(disp_8fps, abs=0.01)
 
 
 class TestTrackBuilding:
@@ -102,7 +123,7 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4, max_match_distance=200.0)
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=800.0, fps_sample=4)
         frames = [dummy_frame] * 3
         tracks = detector.detect_all_tracks(frames)
 
@@ -125,7 +146,7 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4, max_match_distance=200.0)
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=800.0, fps_sample=4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 2
@@ -150,7 +171,7 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4, fps_sample=4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 1
@@ -164,6 +185,7 @@ class TestTrackBuilding:
         mock_model = mock_yolo_cls.return_value
 
         # Frame 0: person at x=100. Frame 1: person at x=500 (400px away)
+        # max_match_distance=400 px/sec at 4fps = 100 px/frame, so 400px gap -> separate
         box0 = _make_mock_box(cls=0, conf=0.8, xyxy=[80, 60, 120, 140])
         box1 = _make_mock_box(cls=0, conf=0.8, xyxy=[480, 60, 520, 140])
 
@@ -178,7 +200,8 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4, max_match_distance=100.0)
+        # 400 px/sec / 4 fps = 100 px/frame; 400px gap > 100 -> separate tracks
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=400.0, fps_sample=4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 2
@@ -196,21 +219,21 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4, fps_sample=4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 0
 
     @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_no_frames_returns_empty(self, mock_yolo_cls: MagicMock) -> None:
-        detector = HSPDetector()
+        detector = HSPDetector(fps_sample=4)
         assert detector.detect_all_tracks([]) == []
 
 
 class TestHSPDetector:
     @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_no_frames_returns_none(self, mock_yolo_cls: MagicMock) -> None:
-        detector = HSPDetector()
+        detector = HSPDetector(fps_sample=4)
         assert detector.detect([]) is None
 
     @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
@@ -224,7 +247,7 @@ class TestHSPDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4, fps_sample=4)
         assert detector.detect([dummy_frame, dummy_frame]) is None
 
     @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
@@ -234,7 +257,7 @@ class TestHSPDetector:
         """Person moving slowly (below threshold) should not be flagged."""
         mock_model = mock_yolo_cls.return_value
 
-        # Person moves 5px per frame (well below 60.0 threshold)
+        # Person moves 5px per frame at 4fps = 20 px/sec (below 240.0 threshold)
         boxes = [
             [_make_mock_box(cls=0, conf=0.8, xyxy=[95, 60, 105, 140])],
             [_make_mock_box(cls=0, conf=0.8, xyxy=[100, 60, 110, 140])],
@@ -247,7 +270,10 @@ class TestHSPDetector:
         mock_model.side_effect = side_effect
 
         detector = HSPDetector(
-            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
+            person_confidence=0.4,
+            displacement_threshold=240.0,
+            max_match_distance=800.0,
+            fps_sample=4,
         )
         assert detector.detect([dummy_frame] * 3) is None
 
@@ -258,7 +284,7 @@ class TestHSPDetector:
         """Person moving fast should be flagged as HSP."""
         mock_model = mock_yolo_cls.return_value
 
-        # Person moves 60px per frame (above 60.0 threshold)
+        # Person moves 60px per frame at 4fps = 240 px/sec (>= 240.0 threshold)
         boxes = [
             [_make_mock_box(cls=0, conf=0.75, xyxy=[80, 60, 120, 140])],
             [_make_mock_box(cls=0, conf=0.85, xyxy=[140, 60, 180, 140])],
@@ -271,7 +297,10 @@ class TestHSPDetector:
         mock_model.side_effect = side_effect
 
         detector = HSPDetector(
-            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
+            person_confidence=0.4,
+            displacement_threshold=240.0,
+            max_match_distance=800.0,
+            fps_sample=4,
         )
         detection = detector.detect([dummy_frame] * 3)
 
@@ -286,7 +315,7 @@ class TestHSPDetector:
         """Only the fast person should be detected, not the slow one."""
         mock_model = mock_yolo_cls.return_value
 
-        # Slow person (left): barely moves. Fast person (right): moves 60px/frame
+        # Slow person (left): barely moves. Fast person (right): moves 60px/frame = 240 px/sec
         frame_boxes = [
             [
                 _make_mock_box(cls=0, conf=0.9, xyxy=[10, 60, 50, 140]),  # slow
@@ -308,7 +337,10 @@ class TestHSPDetector:
         mock_model.side_effect = side_effect
 
         detector = HSPDetector(
-            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
+            person_confidence=0.4,
+            displacement_threshold=240.0,
+            max_match_distance=800.0,
+            fps_sample=4,
         )
         detection = detector.detect([dummy_frame] * 3)
 
@@ -332,7 +364,10 @@ class TestHSPDetector:
         mock_model.side_effect = side_effect
 
         detector = HSPDetector(
-            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
+            person_confidence=0.4,
+            displacement_threshold=240.0,
+            max_match_distance=800.0,
+            fps_sample=4,
         )
         # Only one frame → track has 1 point → can't compute displacement
         assert detector.detect([dummy_frame]) is None
@@ -355,5 +390,5 @@ class TestHSPDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = HSPDetector(person_confidence=0.4, displacement_threshold=60.0)
+        detector = HSPDetector(person_confidence=0.4, displacement_threshold=240.0, fps_sample=4)
         assert detector.detect([dummy_frame, dummy_frame]) is None
