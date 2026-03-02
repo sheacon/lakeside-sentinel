@@ -136,7 +136,7 @@ See `.env.example` for the full list. Key variables:
 | `CAMERA_LATITUDE` | — | Camera latitude (daylight filtering) |
 | `CAMERA_LONGITUDE` | — | Camera longitude (daylight filtering) |
 | `YOLO_MODEL` | `yolo26s.pt` | YOLO model weights file |
-| `YOLO_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts |
+| `VEHICLE_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts |
 | `YOLO_BATCH_SIZE` | `16` | Frames per YOLO inference batch (prevents GPU OOM) |
 | `CROP_PADDING` | `0.2` | Padding around detected bounding box |
 | `ROI_Y_START` | `0.0` | Vertical region of interest start (fraction 0.0–1.0) |
@@ -146,5 +146,5 @@ See `.env.example` for the full list. Key variables:
 | `FPS_SAMPLE` | `2` | Frames extracted per second of video |
 | `HSP_FPS_SAMPLE` | `4` | Frames per second for HSP mode (higher = better tracking) |
 | `HSP_DISPLACEMENT_THRESHOLD` | `60.0` | Min centroid displacement (px/interval) to flag as HSP |
-| `HSP_PERSON_CONFIDENCE` | `0.4` | Min YOLO person confidence for tracking |
+| `HSP_PERSON_CONFIDENCE_THRESHOLD` | `0.4` | Min YOLO person confidence for tracking |
 | `HSP_MAX_MATCH_DISTANCE` | `200.0` | Max centroid distance (px) for track matching |

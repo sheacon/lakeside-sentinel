@@ -36,7 +36,7 @@ class RunConfig:
     confidence_threshold: float = 0.4
     # HSP-specific
     hsp_displacement: float = 60.0
-    hsp_person_confidence: float = 0.4
+    hsp_person_confidence_threshold: float = 0.4
     hsp_max_match_distance: float = 200.0
     # ROI (shared, not swept)
     roi_y_start: float = 0.0
@@ -102,7 +102,7 @@ def build_vehicle_configs(
 def build_hsp_configs(
     models: list[str],
     fps_values: list[int],
-    person_confidences: list[float],
+    person_confidence_thresholds: list[float],
     displacements: list[float],
     max_match_distances: list[float],
     roi_y_start: float,
@@ -114,7 +114,7 @@ def build_hsp_configs(
     configs: list[RunConfig] = []
     for run_id, (model, fps, pconf, disp, maxd) in enumerate(
         itertools.product(
-            models, fps_values, person_confidences, displacements, max_match_distances
+            models, fps_values, person_confidence_thresholds, displacements, max_match_distances
         ),
         start=1,
     ):
@@ -124,7 +124,7 @@ def build_hsp_configs(
                 mode="hsp",
                 model_name=model,
                 fps_sample=fps,
-                hsp_person_confidence=pconf,
+                hsp_person_confidence_threshold=pconf,
                 hsp_displacement=disp,
                 hsp_max_match_distance=maxd,
                 roi_y_start=roi_y_start,
@@ -309,7 +309,7 @@ def run_hsp(
     frames = frames_cache[config.fps_sample]
     cache_key = (
         config.model_name,
-        config.hsp_person_confidence,
+        config.hsp_person_confidence_threshold,
         config.hsp_max_match_distance,
         config.fps_sample,
     )
@@ -319,7 +319,7 @@ def run_hsp(
     if cache_key not in hsp_cache:
         detector = HSPDetector(
             model_name=config.model_name,
-            person_confidence=config.hsp_person_confidence,
+            person_confidence=config.hsp_person_confidence_threshold,
             displacement_threshold=0.0,  # we post-filter
             max_match_distance=config.hsp_max_match_distance,
         )
@@ -397,7 +397,8 @@ def print_hsp_table(results: list[HSPRunResult]) -> None:
         model_short = r.config.model_name.replace(".pt", "")
         print(
             f"{r.config.run_id:>3} | {model_short:<10} | {r.config.fps_sample:>3} "
-            f"| {r.config.hsp_person_confidence:>5.2f} | {r.config.hsp_displacement:>8.1f} "
+            f"| {r.config.hsp_person_confidence_threshold:>5.2f} "
+            f"| {r.config.hsp_displacement:>8.1f} "
             f"| {r.config.hsp_max_match_distance:>7.0f} | {r.frame_count:>6} "
             f"| {len(r.tracks):>6} | {len(r.fast_tracks):>4} "
             f"| {r.max_displacement:>8.1f} | {r.elapsed_secs:>5.1f}s"
@@ -503,7 +504,7 @@ def main() -> None:
         configs = build_hsp_configs(
             models=args.model,
             fps_values=fps_values,
-            person_confidences=args.hsp_person_confidence,
+            person_confidence_thresholds=args.hsp_person_confidence,
             displacements=args.hsp_displacement,
             max_match_distances=args.hsp_max_match_distance,
             roi_y_start=args.roi_y_start,
@@ -616,7 +617,7 @@ def _run_hsp_sweep(
             config.run_id,
             config.model_name,
             config.fps_sample,
-            config.hsp_person_confidence,
+            config.hsp_person_confidence_threshold,
             config.hsp_displacement,
             config.hsp_max_match_distance,
         )

@@ -108,7 +108,7 @@ class TestBuildHSPConfigs:
         configs = build_hsp_configs(
             models=["yolo26s.pt"],
             fps_values=[4],
-            person_confidences=[0.4],
+            person_confidence_thresholds=[0.4],
             displacements=[60.0],
             max_match_distances=[200.0],
             roi_y_start=0.0,
@@ -120,14 +120,14 @@ class TestBuildHSPConfigs:
         c = configs[0]
         assert c.mode == "hsp"
         assert c.hsp_displacement == 60.0
-        assert c.hsp_person_confidence == 0.4
+        assert c.hsp_person_confidence_threshold == 0.4
         assert c.hsp_max_match_distance == 200.0
 
     def test_cartesian_product(self) -> None:
         configs = build_hsp_configs(
             models=["yolo26s.pt"],
             fps_values=[4, 8],
-            person_confidences=[0.3, 0.4],
+            person_confidence_thresholds=[0.3, 0.4],
             displacements=[40.0, 60.0, 80.0],
             max_match_distances=[200.0],
             roi_y_start=0.0,
@@ -142,7 +142,7 @@ class TestBuildHSPConfigs:
         configs = build_hsp_configs(
             models=["a.pt", "b.pt"],
             fps_values=[4, 8],
-            person_confidences=[0.3, 0.4],
+            person_confidence_thresholds=[0.3, 0.4],
             displacements=[40.0, 60.0],
             max_match_distances=[150.0, 200.0],
             roi_y_start=0.0,

@@ -53,7 +53,7 @@ class Monitor:
         self._api = NestCameraAPI(self._auth, settings.nest_device_id)
         self._detector = VehicleDetector(
             model_name=settings.yolo_model,
-            confidence_threshold=settings.yolo_confidence_threshold,
+            confidence_threshold=settings.vehicle_confidence_threshold,
             batch_size=settings.yolo_batch_size,
         )
         self._email = EmailSender(
@@ -320,7 +320,7 @@ class Monitor:
 
         hsp_detector = HSPDetector(
             model_name=self._settings.yolo_model,
-            person_confidence=self._settings.hsp_person_confidence,
+            person_confidence=self._settings.hsp_person_confidence_threshold,
             displacement_threshold=self._settings.hsp_displacement_threshold,
             max_match_distance=self._settings.hsp_max_match_distance,
             batch_size=self._settings.yolo_batch_size,

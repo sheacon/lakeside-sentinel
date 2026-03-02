@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Detection
     yolo_model: str = "yolo26s.pt"
-    yolo_confidence_threshold: float = 0.4
+    vehicle_confidence_threshold: float = 0.4
     yolo_batch_size: int = 16
     crop_padding: float = 0.2
 
@@ -36,5 +36,5 @@ class Settings(BaseSettings):
     # High-speed person detection (experimental)
     hsp_fps_sample: int = 4
     hsp_displacement_threshold: float = 60.0
-    hsp_person_confidence: float = 0.4
+    hsp_person_confidence_threshold: float = 0.4
     hsp_max_match_distance: float = 200.0
