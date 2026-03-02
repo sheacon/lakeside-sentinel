@@ -125,9 +125,14 @@ class Monitor:
             print("No events to process.")
             return
 
-        dump_dir = Path("output") / "detections"
+        dump_dir = Path("output") / "video"
         dump_dir.mkdir(parents=True, exist_ok=True)
         print(f"[clips] Saving to: {dump_dir.resolve()}\n")
+
+        if target_date is not None:
+            date_str = target_date.isoformat()
+        else:
+            date_str = start.astimezone().strftime("%Y-%m-%d")
 
         print("[2/4] Downloading clips...")
         clips: list[tuple[int, bytes]] = []
@@ -202,7 +207,7 @@ class Monitor:
             total_frames += len(frames)
             if not frames:
                 print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
-                mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                 clip_reports.append(
                     ClipReport(
                         event_time=event.start_time,
@@ -215,7 +220,7 @@ class Monitor:
 
             detection, class_best = self._detector.detect_detailed(frames)
 
-            mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+            mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
             clip_reports.append(
                 ClipReport(
                     event_time=event.start_time,
@@ -254,7 +259,8 @@ class Monitor:
             crop_padding=self._settings.crop_padding,
             include_video=True,
         )
-        report_path = dump_dir / "report.html"
+        report_path = Path("output") / f"report-{date_str}.html"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
         print(f"       Report: {report_path.resolve()}")
@@ -336,9 +342,14 @@ class Monitor:
             print("No events to process.")
             return
 
-        dump_dir = Path("output") / "detections-hsp"
+        dump_dir = Path("output") / "video"
         dump_dir.mkdir(parents=True, exist_ok=True)
         print(f"[clips] Saving to: {dump_dir.resolve()}\n")
+
+        if target_date is not None:
+            date_str = target_date.isoformat()
+        else:
+            date_str = start.astimezone().strftime("%Y-%m-%d")
 
         print("[2/4] Downloading clips...")
         clips: list[tuple[int, bytes]] = []
@@ -414,7 +425,7 @@ class Monitor:
             total_frames += len(frames)
             if not frames:
                 print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
-                mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+                mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                 clip_reports.append(
                     ClipReport(
                         event_time=event.start_time,
@@ -439,7 +450,7 @@ class Monitor:
                     disp,
                 )
 
-            mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+            mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
             # Build class_detections with the HSP detection if present
             class_dets: dict[str, Detection] = {}
             if detection:
@@ -480,7 +491,8 @@ class Monitor:
             crop_padding=self._settings.crop_padding,
             include_video=True,
         )
-        report_path = dump_dir / "report.html"
+        report_path = Path("output") / f"report-hsp-{date_str}.html"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
         print(f"       Report: {report_path.resolve()}")

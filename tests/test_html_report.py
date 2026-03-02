@@ -27,7 +27,7 @@ def _make_clip_report(
 ) -> ClipReport:
     event_time = datetime(2026, 2, 28, hour, 0, 0, tzinfo=timezone.utc)
     local = event_time.astimezone()
-    mp4_fn = local.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
+    mp4_fn = "video/" + local.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
     return ClipReport(
         event_time=event_time,
         mp4_filename=mp4_fn,

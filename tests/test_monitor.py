@@ -86,7 +86,7 @@ class TestRunCache:
         mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
 
         # Pre-populate the cache directory with the expected file
-        cache_dir = tmp_path / "output" / "detections"
+        cache_dir = tmp_path / "output" / "video"
         cache_dir.mkdir(parents=True)
         local_time = event.start_time.astimezone()
         filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
@@ -132,6 +132,6 @@ class TestRunCache:
         # File should have been written to disk
         local_time = event.start_time.astimezone()
         filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-        cached_file = tmp_path / "output" / "detections" / filename
+        cached_file = tmp_path / "output" / "video" / filename
         assert cached_file.exists()
         assert cached_file.read_bytes() == b"fresh_download"
