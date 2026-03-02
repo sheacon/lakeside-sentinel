@@ -367,3 +367,26 @@ class TestSettingsInReport:
     def test_no_settings_block_when_none(self) -> None:
         html = generate_report([], mode="veh")
         assert "Parameters" not in html
+
+
+class TestSubtitle:
+    def test_subtitle_rendered(self) -> None:
+        html = generate_report([], title="Test Report", subtitle="2026-03-01")
+        assert "2026-03-01" in html
+
+    def test_no_subtitle_when_none(self) -> None:
+        html = generate_report([], title="Test Report")
+        # No subtitle paragraph between h1 and stats
+        assert html.index("</h1>") < html.index("clips analysed")
+
+    def test_present_mode_title_and_subtitle(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report(
+            [report],
+            mode="present",
+            title="Motorized Vehicle Detection Report",
+            subtitle="2026-03-01",
+        )
+        assert "Motorized Vehicle Detection Report" in html
+        assert "2026-03-01" in html

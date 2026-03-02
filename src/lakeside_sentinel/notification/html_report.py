@@ -70,6 +70,7 @@ def generate_report(
     title: str = "Detection Report",
     mode: str = "veh",
     settings: dict[str, object] | None = None,
+    subtitle: str | None = None,
 ) -> str:
     """Generate a self-contained HTML report.
 
@@ -80,6 +81,7 @@ def generate_report(
         title: Title for the HTML report.
         mode: Detection mode ("veh", "hsp", or "present"). Controls sorting and display.
         settings: Optional settings dict to display in debug mode reports.
+        subtitle: Optional subtitle shown below the title.
 
     Returns:
         The generated HTML string.
@@ -235,7 +237,12 @@ def generate_report(
         "h1{margin-bottom:4px} .stats{color:#64748b;margin-bottom:24px}"
         "</style></head><body>"
         f"<h1>{title}</h1>"
-        f'<p class="stats">{total_clips} clips analysed &middot; '
+        + (
+            f'<p style="color:#475569;margin-top:0;margin-bottom:8px">{subtitle}</p>'
+            if subtitle
+            else ""
+        )
+        + f'<p class="stats">{total_clips} clips analysed &middot; '
         f"{detected_clips} with detections ({sort_label})</p>"
         + settings_html
         + "".join(sections)

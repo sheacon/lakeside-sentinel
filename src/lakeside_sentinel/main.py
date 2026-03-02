@@ -448,6 +448,7 @@ class Monitor:
         title: str,
         send_email: bool,
         label: str,
+        subtitle: str | None = None,
     ) -> tuple[Path, str | None]:
         """Step 4: Generate HTML report and optionally send email."""
         print("\n[4/4] Generating HTML report...")
@@ -459,6 +460,7 @@ class Monitor:
             title=title,
             mode=mode,
             settings=settings_dict,
+            subtitle=subtitle,
         )
 
         if mode == "present":
@@ -480,6 +482,7 @@ class Monitor:
                 title=title,
                 mode=mode,
                 settings=settings_dict,
+                subtitle=subtitle,
             )
             email_id = self._email.send_report(email_html, f"{title} — {label}")
             if email_id:
@@ -555,7 +558,13 @@ class Monitor:
         merged_reports, detection_count = self._verify_with_claude(merged_reports, False)
 
         report_path, email_id = self._generate_and_send_report(
-            merged_reports, date_str, "present", "Detection Report", send_email, label
+            merged_reports,
+            date_str,
+            "present",
+            "Motorized Vehicle Detection Report",
+            send_email,
+            label,
+            subtitle=date_str,
         )
 
         print(f"\n{'=' * 60}")
