@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & run logic
-├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email, --claude)
+├── cli.py                 # CLI argument parser (present mode default, --debug --veh/--hsp)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -20,7 +20,7 @@ src/lakeside_sentinel/
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
-│   └── html_report.py     # Self-contained HTML report; mode-aware sorting (VEH by confidence, HSP by speed)
+│   └── html_report.py     # Self-contained HTML report; mode-aware (present/veh/hsp)
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
@@ -38,20 +38,32 @@ cp .env.example .env  # then fill in credentials
 
 ## Running
 
-A mode (`--veh` or `--hsp`) must be specified — there is no default.
+### Present mode (default)
+
+Runs both VEH + HSP detection with Claude verification. Produces a clean report suitable for sharing (hides confidence scores, class names, and debug info). Requires `ANTHROPIC_API_KEY`.
 
 ```bash
-python -m lakeside_sentinel --veh              # VEH mode: most recent daylight period
-python -m lakeside_sentinel --veh --email      # VEH mode with email report
-python -m lakeside_sentinel --veh --date 2026-02-28  # VEH mode for a specific date
-python -m lakeside_sentinel --veh --claude     # VEH mode with Claude Vision verification
-python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected in report
-python -m lakeside_sentinel --hsp              # HSP detection mode
-python -m lakeside_sentinel --hsp --email      # HSP detection with email report
-python -m lakeside_sentinel --hsp --claude     # HSP mode with Claude Vision verification
+python -m lakeside_sentinel                    # most recent daylight period
+python -m lakeside_sentinel --email            # with email report
+python -m lakeside_sentinel --date 2026-02-28  # specific date
 ```
 
-Scheduled via `run.sh` (passes `--veh --email`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
+### Debug mode
+
+Runs a single detector with full diagnostic output (confidence scores, class names, Claude badges).
+
+```bash
+python -m lakeside_sentinel --debug --veh              # VEH detection
+python -m lakeside_sentinel --debug --veh --email      # VEH with email report
+python -m lakeside_sentinel --debug --veh --date 2026-02-28  # VEH for a specific date
+python -m lakeside_sentinel --debug --veh --claude     # VEH with Claude verification
+python -m lakeside_sentinel --debug --veh --claude --claude-keep-rejected  # keep rejected
+python -m lakeside_sentinel --debug --hsp              # HSP detection
+python -m lakeside_sentinel --debug --hsp --email      # HSP with email report
+python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verification
+```
+
+Scheduled via `run.sh` (passes `--email`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
 
 ## Tuning
 
@@ -144,7 +156,7 @@ See `.env.example` for the full list. Key variables:
 - `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 240.0, px/sec) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 800.0, px/sec) - HSP tracking (thresholds are FPS-invariant)
-- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (optional, required for `--claude`)
+- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for present mode and `--debug --claude`)
 - `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
 
 ## Conventions

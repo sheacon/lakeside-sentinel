@@ -9,7 +9,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using [YOL
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & daily run logic
-├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email, --claude)
+├── cli.py                 # CLI argument parser (present mode default, --debug --veh/--hsp)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -22,7 +22,7 @@ src/lakeside_sentinel/
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
-│   └── html_report.py     # Self-contained HTML report; mode-aware sorting (VEH by confidence, HSP by speed)
+│   └── html_report.py     # Self-contained HTML report; mode-aware (present/veh/hsp)
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
@@ -40,20 +40,34 @@ cp .env.example .env  # then fill in credentials
 
 ## Running
 
+### Present mode (default)
+
+Runs both VEH + HSP detection with Claude verification. Produces a clean report suitable for sharing. Requires `ANTHROPIC_API_KEY`.
+
 ```bash
-python -m lakeside_sentinel --veh              # VEH mode: most recent daylight period
-python -m lakeside_sentinel --veh --email      # VEH mode with email report
-python -m lakeside_sentinel --veh --date 2026-02-28  # VEH mode for a specific date
-python -m lakeside_sentinel --veh --claude     # VEH mode with Claude Vision verification
-python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected in report
-python -m lakeside_sentinel --hsp              # HSP detection mode
-python -m lakeside_sentinel --hsp --email      # HSP detection with email report
-python -m lakeside_sentinel --hsp --claude     # HSP mode with Claude Vision verification
+python -m lakeside_sentinel                    # most recent daylight period
+python -m lakeside_sentinel --email            # with email report
+python -m lakeside_sentinel --date 2026-02-28  # specific date
+```
+
+### Debug mode
+
+Runs a single detector with full diagnostic output (confidence scores, class names, Claude badges).
+
+```bash
+python -m lakeside_sentinel --debug --veh              # VEH detection
+python -m lakeside_sentinel --debug --veh --email      # VEH with email report
+python -m lakeside_sentinel --debug --veh --date 2026-02-28  # VEH for a specific date
+python -m lakeside_sentinel --debug --veh --claude     # VEH with Claude verification
+python -m lakeside_sentinel --debug --veh --claude --claude-keep-rejected  # keep rejected
+python -m lakeside_sentinel --debug --hsp              # HSP detection
+python -m lakeside_sentinel --debug --hsp --email      # HSP with email report
+python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verification
 ```
 
 ## Scheduling
 
-The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs VEH detection with email reporting. Hook it into your preferred scheduler:
+The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs present mode with email reporting. Hook it into your preferred scheduler:
 
 **cron** (daily at 21:00):
 ```bash

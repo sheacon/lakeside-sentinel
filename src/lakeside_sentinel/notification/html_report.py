@@ -15,6 +15,8 @@ from lakeside_sentinel.utils.image import crop_to_bbox
 
 logger = logging.getLogger(__name__)
 
+_PRESENT_LABEL = "Potential Motorized Vehicle"
+
 
 @dataclass(frozen=True)
 class ClipReport:
@@ -52,11 +54,13 @@ def generate_report(
         crop_padding: Padding fraction for cropping detection images.
         include_video: Whether to include video player elements.
         title: Title for the HTML report.
-        mode: Detection mode ("veh" or "hsp"). Controls sorting and display.
+        mode: Detection mode ("veh", "hsp", or "present"). Controls sorting and display.
 
     Returns:
         The generated HTML string.
     """
+    is_present = mode == "present"
+
     # Filter out clips with no above-threshold detections
     filtered_reports = [r for r in clip_reports if r.class_detections]
 
@@ -68,6 +72,10 @@ def generate_report(
 
         filtered_reports.sort(key=_hsp_sort_key, reverse=True)
         sort_label = "sorted by speed"
+    elif is_present:
+        # Sort chronologically by event_time
+        filtered_reports.sort(key=lambda r: r.event_time)
+        sort_label = "sorted chronologically"
     else:
         # Sort by motorcycle confidence (highest first), then bicycle confidence
         def _veh_sort_key(r: ClipReport) -> tuple[float, float]:
@@ -102,34 +110,45 @@ def generate_report(
                 reverse=True,
             ):
                 img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding)
-                if mode == "hsp" and det.speed is not None:
-                    metric_label = f"{det.speed:.0f} px/sec"
+
+                if is_present:
+                    # Present mode: generic label, no metrics, no Claude info
+                    display_name = _PRESENT_LABEL
+                    metric_html = ""
+                    badge_html = ""
                 else:
-                    metric_label = f"{det.confidence:.0%}"
-                badge_html = ""
-                if det.verification_status == "confirmed":
-                    badge_html = (
-                        '<div style="color:#16a34a;font-size:0.8em;margin-top:4px">'
-                        "&#10003; Claude verified</div>"
-                    )
-                elif det.verification_status == "rejected":
-                    badge_html = (
-                        '<div style="color:#dc2626;font-size:0.8em;margin-top:4px">'
-                        "&#10007; Claude rejected</div>"
-                    )
-                if det.verification_response is not None:
-                    badge_html += (
-                        '<div style="color:#94a3b8;font-size:0.75em;'
-                        'font-style:italic;margin-top:2px">'
-                        f"Claude: &ldquo;{det.verification_response}&rdquo;</div>"
-                    )
+                    # Debug modes: show actual class name, metrics, Claude info
+                    display_name = class_name
+                    if mode == "hsp" and det.speed is not None:
+                        metric_label = f"{det.speed:.0f} px/sec"
+                    else:
+                        metric_label = f"{det.confidence:.0%}"
+                    metric_html = f'<br/><span style="color:#64748b">{metric_label}</span>'
+                    badge_html = ""
+                    if det.verification_status == "confirmed":
+                        badge_html = (
+                            '<div style="color:#16a34a;font-size:0.8em;margin-top:4px">'
+                            "&#10003; Claude verified</div>"
+                        )
+                    elif det.verification_status == "rejected":
+                        badge_html = (
+                            '<div style="color:#dc2626;font-size:0.8em;margin-top:4px">'
+                            "&#10007; Claude rejected</div>"
+                        )
+                    if det.verification_response is not None:
+                        badge_html += (
+                            '<div style="color:#94a3b8;font-size:0.75em;'
+                            'font-style:italic;margin-top:2px">'
+                            f"Claude: &ldquo;{det.verification_response}&rdquo;</div>"
+                        )
+
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
                     f'text-align:center;width:160px">'
                     f'<img src="{img_uri}" style="max-width:144px;max-height:144px;'
                     f'border-radius:4px;display:block;margin:0 auto 6px" />'
-                    f"<strong>{class_name}</strong><br/>"
-                    f'<span style="color:#64748b">{metric_label}</span>'
+                    f"<strong>{display_name}</strong>"
+                    f"{metric_html}"
                     f"{badge_html}"
                     f"</div>"
                 )
@@ -142,13 +161,19 @@ def generate_report(
         # Best detection summary
         best_str = ""
         if report.best_detection:
-            best_str = (
-                f'<span style="color:#16a34a;font-weight:bold">'
-                f"{report.best_detection.class_name} "
-                f"({report.best_detection.confidence:.0%})</span>"
-            )
+            if is_present:
+                best_str = f'<span style="color:#16a34a;font-weight:bold">{_PRESENT_LABEL}</span>'
+            else:
+                best_str = (
+                    f'<span style="color:#16a34a;font-weight:bold">'
+                    f"{report.best_detection.class_name} "
+                    f"({report.best_detection.confidence:.0%})</span>"
+                )
         else:
-            best_str = '<span style="color:#94a3b8">No detection above threshold</span>'
+            if is_present:
+                best_str = '<span style="color:#94a3b8">No detection</span>'
+            else:
+                best_str = '<span style="color:#94a3b8">No detection above threshold</span>'
 
         video_html = ""
         if include_video:

@@ -65,12 +65,14 @@ class TestRunCache:
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     def test_cached_files_are_read_from_disk(
         self,
         mock_email_cls: MagicMock,
-        mock_detector_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
         mock_webbrowser_open: MagicMock,
@@ -85,7 +87,7 @@ class TestRunCache:
         mock_api.get_events.return_value = [event]
         mock_api.download_clip.return_value = b"downloaded_data"
 
-        mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
 
         # Pre-populate the cache directory with the expected file
         cache_dir = tmp_path / "output" / "video"
@@ -95,7 +97,7 @@ class TestRunCache:
         (cache_dir / filename).write_bytes(b"cached_data")
 
         monitor = Monitor(mock_settings)
-        monitor.run()
+        monitor.run_debug_veh()
 
         # download_clip should NOT have been called since the file was cached
         mock_api.download_clip.assert_not_called()
@@ -103,12 +105,14 @@ class TestRunCache:
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     def test_missing_files_are_downloaded_and_written(
         self,
         mock_email_cls: MagicMock,
-        mock_detector_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
         mock_webbrowser_open: MagicMock,
@@ -123,10 +127,10 @@ class TestRunCache:
         mock_api.get_events.return_value = [event]
         mock_api.download_clip.return_value = b"fresh_download"
 
-        mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
 
         monitor = Monitor(mock_settings)
-        monitor.run()
+        monitor.run_debug_veh()
 
         # download_clip should have been called since no cached file exists
         mock_api.download_clip.assert_called_once_with(event)
@@ -145,6 +149,7 @@ class TestThresholdFiltering:
     @patch("lakeside_sentinel.main.extract_frames")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
@@ -152,7 +157,8 @@ class TestThresholdFiltering:
         self,
         mock_generate_report: MagicMock,
         mock_email_cls: MagicMock,
-        mock_detector_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
         mock_extract_frames: MagicMock,
@@ -185,13 +191,13 @@ class TestThresholdFiltering:
             confidence=0.85,
             class_name="Motorcycle",
         )
-        mock_detector_cls.return_value.detect_detailed.return_value = (
+        mock_veh_cls.return_value.detect_detailed.return_value = (
             above_threshold,
             {"Bicycle": sub_threshold, "Motorcycle": above_threshold},
         )
 
         monitor = Monitor(mock_settings)
-        monitor.run()
+        monitor.run_debug_veh()
 
         # generate_report is called once (no email), check the first call
         clip_reports = mock_generate_report.call_args_list[0][0][0]
@@ -211,6 +217,7 @@ class TestClaudeVerification:
     @patch("lakeside_sentinel.main.extract_frames")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
@@ -218,7 +225,8 @@ class TestClaudeVerification:
         self,
         mock_generate_report: MagicMock,
         mock_email_cls: MagicMock,
-        mock_detector_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
         mock_extract_frames: MagicMock,
@@ -253,7 +261,7 @@ class TestClaudeVerification:
             confidence=0.65,
             class_name="Bicycle",
         )
-        mock_detector_cls.return_value.detect_detailed.return_value = (
+        mock_veh_cls.return_value.detect_detailed.return_value = (
             moto_det,
             {"Motorcycle": moto_det, "Bicycle": bike_det},
         )
@@ -270,7 +278,7 @@ class TestClaudeVerification:
         mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify_detections
 
         monitor = Monitor(mock_settings)
-        monitor.run(use_claude=True)
+        monitor.run_debug_veh(use_claude=True)
 
         clip_reports = mock_generate_report.call_args_list[0][0][0]
         assert len(clip_reports) == 1
@@ -288,6 +296,7 @@ class TestClaudeVerification:
     @patch("lakeside_sentinel.main.extract_frames")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
@@ -295,7 +304,8 @@ class TestClaudeVerification:
         self,
         mock_generate_report: MagicMock,
         mock_email_cls: MagicMock,
-        mock_detector_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
         mock_auth_cls: MagicMock,
         mock_api_cls: MagicMock,
         mock_extract_frames: MagicMock,
@@ -330,7 +340,7 @@ class TestClaudeVerification:
             confidence=0.65,
             class_name="Bicycle",
         )
-        mock_detector_cls.return_value.detect_detailed.return_value = (
+        mock_veh_cls.return_value.detect_detailed.return_value = (
             moto_det,
             {"Motorcycle": moto_det, "Bicycle": bike_det},
         )
@@ -347,7 +357,7 @@ class TestClaudeVerification:
         mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify_detections
 
         monitor = Monitor(mock_settings)
-        monitor.run(use_claude=True, claude_keep_rejected=True)
+        monitor.run_debug_veh(use_claude=True, claude_keep_rejected=True)
 
         clip_reports = mock_generate_report.call_args_list[0][0][0]
         report = clip_reports[0]
@@ -357,3 +367,297 @@ class TestClaudeVerification:
         assert "Bicycle" in report.class_detections
         assert report.best_detection is not None
         assert report.best_detection.class_name == "Motorcycle"
+
+
+class TestPresentMode:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_present_mode_runs_both_detectors_with_claude(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        mock_veh_cls.return_value.detect_detailed.return_value = (
+            moto_det,
+            {"Motorcycle": moto_det},
+        )
+
+        hsp_det = Detection(
+            frame=dummy_frame,
+            bbox=(20.0, 20.0, 80.0, 80.0),
+            confidence=0.70,
+            class_name="HSP",
+            speed=300.0,
+        )
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = hsp_det
+
+        # Claude confirms everything
+        def mock_verify(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for det in detections.values():
+                det.verification_status = "confirmed"
+            return detections
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present()
+
+        # Both VEH and HSP detectors should have been called
+        mock_veh_cls.return_value.detect_detailed.assert_called_once()
+        mock_hsp_cls.return_value.detect.assert_called_once()
+
+        # Claude verification should have been called
+        mock_verifier_cls.return_value.verify_detections.assert_called()
+
+        # generate_report should use mode="present"
+        call_kwargs = mock_generate_report.call_args_list[0][1]
+        assert call_kwargs["mode"] == "present"
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    def test_present_mode_report_filename(
+        self,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+
+        # Claude verifier (nothing to verify)
+        mock_verifier_cls.return_value.verify_detections.return_value = {}
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        # Report filename should be report-{date}.html (no mode prefix)
+        report_path = tmp_path / "output" / "report-2026-02-28.html"
+        assert report_path.exists()
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_present_mode_merges_veh_and_hsp(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        mock_veh_cls.return_value.detect_detailed.return_value = (
+            moto_det,
+            {"Motorcycle": moto_det},
+        )
+
+        hsp_det = Detection(
+            frame=dummy_frame,
+            bbox=(20.0, 20.0, 80.0, 80.0),
+            confidence=0.70,
+            class_name="HSP",
+            speed=300.0,
+        )
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = hsp_det
+
+        # Claude confirms everything
+        def mock_verify(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for det in detections.values():
+                det.verification_status = "confirmed"
+            return detections
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present()
+
+        # The merged report should contain both Motorcycle and HSP detections
+        clip_reports = mock_generate_report.call_args_list[0][0][0]
+        assert len(clip_reports) == 1
+        report = clip_reports[0]
+        assert "Motorcycle" in report.class_detections
+        assert "HSP" in report.class_detections
+
+
+class TestMergeClipReports:
+    def test_merge_disjoint_detections(self) -> None:
+        from lakeside_sentinel.notification.html_report import ClipReport
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        event_time = datetime(2026, 2, 28, 12, 0, 0, tzinfo=timezone.utc)
+        mp4_fn = "video/2026-02-28_12-00-00.mp4"
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        hsp_det = Detection(
+            frame=dummy_frame,
+            bbox=(20.0, 20.0, 80.0, 80.0),
+            confidence=0.70,
+            class_name="HSP",
+            speed=300.0,
+        )
+
+        veh_reports = [
+            ClipReport(
+                event_time=event_time,
+                mp4_filename=mp4_fn,
+                best_detection=moto_det,
+                class_detections={"Motorcycle": moto_det},
+            )
+        ]
+        hsp_reports = [
+            ClipReport(
+                event_time=event_time,
+                mp4_filename=mp4_fn,
+                best_detection=hsp_det,
+                class_detections={"HSP": hsp_det},
+            )
+        ]
+
+        merged = Monitor._merge_clip_reports(veh_reports, hsp_reports)
+        assert len(merged) == 1
+        assert "Motorcycle" in merged[0].class_detections
+        assert "HSP" in merged[0].class_detections
+        # Best should be highest-confidence unverified detection
+        assert merged[0].best_detection is not None
+        assert merged[0].best_detection.confidence == 0.85
+
+    def test_merge_veh_only_clip(self) -> None:
+        from lakeside_sentinel.notification.html_report import ClipReport
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        event_time = datetime(2026, 2, 28, 12, 0, 0, tzinfo=timezone.utc)
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+
+        veh_reports = [
+            ClipReport(
+                event_time=event_time,
+                mp4_filename="video/a.mp4",
+                best_detection=moto_det,
+                class_detections={"Motorcycle": moto_det},
+            )
+        ]
+        hsp_reports = [
+            ClipReport(
+                event_time=event_time,
+                mp4_filename="video/b.mp4",
+                best_detection=None,
+                class_detections={},
+            )
+        ]
+
+        merged = Monitor._merge_clip_reports(veh_reports, hsp_reports)
+        assert len(merged) == 1
+        # Since HSP has a different filename, VEH report is returned as-is
+        assert "Motorcycle" in merged[0].class_detections
+        assert "HSP" not in merged[0].class_detections

@@ -57,6 +57,14 @@ class Monitor:
             confidence_threshold=settings.veh_confidence_threshold,
             batch_size=settings.yolo_batch_size,
         )
+        self._hsp_detector = HSPDetector(
+            model_name=settings.yolo_model,
+            person_confidence=settings.hsp_person_confidence_threshold,
+            displacement_threshold=settings.hsp_displacement_threshold,
+            max_match_distance=settings.hsp_max_match_distance,
+            batch_size=settings.yolo_batch_size,
+            fps_sample=settings.hsp_fps_sample,
+        )
         self._email = EmailSender(
             api_key=settings.resend_api_key,
             from_email=settings.alert_email_from,
@@ -83,21 +91,24 @@ class Monitor:
             )
         return daylight_events
 
-    def run(
+    # ── Shared pipeline helpers ──────────────────────────────────────
+
+    def _resolve_daylight_span(
         self,
-        send_email: bool = False,
-        target_date: date | None = None,
-        use_claude: bool = False,
-        claude_keep_rejected: bool = False,
-    ) -> None:
-        """Download and analyze events for a daylight period."""
+        target_date: date | None,
+        label_prefix: str,
+    ) -> tuple[datetime, datetime, str]:
+        """Resolve daylight start/end and print the banner.
+
+        Returns (start, end, label).
+        """
         if target_date is not None:
             start, end = get_daylight_span_for_date(
                 target_date,
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = f"VEH DETECTION — {target_date.isoformat()}"
+            label = f"{label_prefix} — {target_date.isoformat()}"
         else:
             now = datetime.now(timezone.utc)
             start, end = get_daylight_span(
@@ -105,19 +116,26 @@ class Monitor:
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = "VEH DETECTION — Most recent daylight"
-        now = end
+            label = f"{label_prefix} — Most recent daylight"
 
         print(f"\n{'=' * 60}")
         print(f"  {label}")
         print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
+        print(f"  To:   {end.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
         print()
         _print_settings(self._settings)
         print(f"{'=' * 60}\n")
 
+        return start, end, label
+
+    def _fetch_events(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> list[CameraEvent]:
+        """Step 1: Fetch events from Nest API and filter to daylight."""
         print("[1/4] Fetching event list from Nest API...", flush=True)
-        events = self._api.get_events(start, now)
+        events = self._api.get_events(start, end)
         total_events = len(events)
         events = self._filter_daylight(events)
         filtered = total_events - len(events)
@@ -127,19 +145,19 @@ class Monitor:
         else:
             print()
         print()
+        return events
 
-        if not events:
-            print("No events to process.")
-            return
+    def _download_clips(
+        self,
+        events: list[CameraEvent],
+    ) -> tuple[list[tuple[int, bytes]], float]:
+        """Step 2: Download clips (with caching).
 
+        Returns (clips, total_mb).
+        """
         dump_dir = Path("output") / "video"
         dump_dir.mkdir(parents=True, exist_ok=True)
         print(f"[clips] Saving to: {dump_dir.resolve()}\n")
-
-        if target_date is not None:
-            date_str = target_date.isoformat()
-        else:
-            date_str = start.astimezone().strftime("%Y-%m-%d")
 
         print("[2/4] Downloading clips...")
         clips: list[tuple[int, bytes]] = []
@@ -194,6 +212,17 @@ class Monitor:
             print(f"       {download_errors} download errors")
         print()
 
+        return clips, total_mb
+
+    def _detect_veh(
+        self,
+        clips: list[tuple[int, bytes]],
+        events: list[CameraEvent],
+    ) -> tuple[list[ClipReport], int, int]:
+        """Step 3 VEH: YOLO detection.
+
+        Returns (clip_reports, detection_count, total_frames).
+        """
         print("[3/4] Analyzing frames with YOLO...")
         detection_count = 0
         total_frames = 0
@@ -268,209 +297,17 @@ class Monitor:
             )
             print(f"            {breakdown}")
 
-        if use_claude:
-            print("\n[3.5/4] Verifying detections with Claude Vision...")
-            verifier = ClaudeVerifier(
-                api_key=self._settings.anthropic_api_key,
-                model=self._settings.claude_vision_model,
-                crop_padding=self._settings.crop_padding,
-            )
-            confirmed_count = 0
-            rejected_count = 0
-            for idx, report in enumerate(clip_reports):
-                if not report.class_detections:
-                    continue
-                verified = verifier.verify_detections(report.class_detections)
-                rejected_in_clip = len(report.class_detections) - len(verified)
-                confirmed_count += len(verified)
-                rejected_count += rejected_in_clip
+        return clip_reports, detection_count, total_frames
 
-                if claude_keep_rejected:
-                    new_class_dets = report.class_detections
-                else:
-                    new_class_dets = verified
-
-                # Pick best confirmed detection (or None if all rejected)
-                confirmed_dets = [
-                    d for d in new_class_dets.values() if d.verification_status == "confirmed"
-                ]
-                error_dets = [d for d in new_class_dets.values() if d.verification_status is None]
-                candidates = confirmed_dets + error_dets
-                new_best = max(candidates, key=lambda d: d.confidence) if candidates else None
-
-                clip_reports[idx] = ClipReport(
-                    event_time=report.event_time,
-                    mp4_filename=report.mp4_filename,
-                    best_detection=new_best,
-                    class_detections=new_class_dets,
-                )
-            print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
-
-            # Recount detections after verification
-            detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
-
-        print("\n[4/4] Generating HTML report...")
-        html = generate_report(
-            clip_reports,
-            crop_padding=self._settings.crop_padding,
-            include_video=True,
-            title="VEH Detection Report",
-            mode="veh",
-        )
-        report_path = Path("output") / f"report-veh-{date_str}.html"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(html)
-        logger.info("HTML report written to %s", report_path)
-        print(f"       Report: {report_path.resolve()}")
-        webbrowser.open(report_path.resolve().as_uri())
-
-        email_id: str | None = None
-        if send_email:
-            email_html = generate_report(
-                clip_reports,
-                crop_padding=self._settings.crop_padding,
-                include_video=False,
-                title="VEH Detection Report",
-                mode="veh",
-            )
-            email_id = self._email.send_report(email_html, f"VEH Detection Report — {label}")
-            if email_id:
-                print(f"       Email sent ({email_id})")
-            else:
-                print("       Email FAILED")
-
-        print(f"\n{'=' * 60}")
-        print("  VEH DETECTION COMPLETE")
-        print(f"  Events:     {len(events)}")
-        print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
-        print(f"  Frames:     {total_frames} analyzed")
-        print(f"  Detections: {detection_count}")
-        print(f"  Report:     {report_path.resolve()}")
-        if send_email:
-            print(f"  Email:      {'sent' if email_id else 'failed'}")
-        print(f"  Clips:      {dump_dir.resolve()}")
-        print(f"{'=' * 60}\n")
-
-    def run_hsp(
+    def _detect_hsp(
         self,
-        send_email: bool = False,
-        target_date: date | None = None,
-        use_claude: bool = False,
-        claude_keep_rejected: bool = False,
-    ) -> None:
-        """Run with experimental high-speed person (HSP) detection."""
-        if target_date is not None:
-            start, end = get_daylight_span_for_date(
-                target_date,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
-            label = f"HSP DETECTION (experimental) — {target_date.isoformat()}"
-        else:
-            now = datetime.now(timezone.utc)
-            start, end = get_daylight_span(
-                now,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
-            label = "HSP DETECTION (experimental) — Most recent daylight"
-        now = end
+        clips: list[tuple[int, bytes]],
+        events: list[CameraEvent],
+    ) -> tuple[list[ClipReport], int, int]:
+        """Step 3 HSP: Person tracking.
 
-        print(f"\n{'=' * 60}")
-        print(f"  {label}")
-        print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print(f"  To:   {now.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print()
-        _print_settings(self._settings)
-        print(f"{'=' * 60}\n")
-
-        hsp_detector = HSPDetector(
-            model_name=self._settings.yolo_model,
-            person_confidence=self._settings.hsp_person_confidence_threshold,
-            displacement_threshold=self._settings.hsp_displacement_threshold,
-            max_match_distance=self._settings.hsp_max_match_distance,
-            batch_size=self._settings.yolo_batch_size,
-            fps_sample=self._settings.hsp_fps_sample,
-        )
-
-        print("[1/4] Fetching event list from Nest API...", flush=True)
-        events = self._api.get_events(start, now)
-        total_events = len(events)
-        events = self._filter_daylight(events)
-        filtered = total_events - len(events)
-        print(f"       Found {total_events} events", end="")
-        if filtered:
-            print(f" ({filtered} nighttime filtered)")
-        else:
-            print()
-        print()
-
-        if not events:
-            print("No events to process.")
-            return
-
-        dump_dir = Path("output") / "video"
-        dump_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[clips] Saving to: {dump_dir.resolve()}\n")
-
-        if target_date is not None:
-            date_str = target_date.isoformat()
-        else:
-            date_str = start.astimezone().strftime("%Y-%m-%d")
-
-        print("[2/4] Downloading clips...")
-        clips: list[tuple[int, bytes]] = []
-        download_errors = 0
-        total_bytes = 0
-        cached_count = 0
-        for i, event in enumerate(events):
-            local_time = event.start_time.astimezone()
-            label = local_time.strftime("%H:%M:%S")
-
-            filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-            filepath = dump_dir / filename
-            if filepath.exists():
-                mp4_bytes = filepath.read_bytes()
-                total_bytes += len(mp4_bytes)
-                clips.append((i, mp4_bytes))
-                cached_count += 1
-                size_mb = len(mp4_bytes) / 1_000_000
-                print(
-                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB (cached)",
-                    flush=True,
-                )
-                continue
-
-            try:
-                mp4_bytes = self._api.download_clip(event)
-                if not mp4_bytes:
-                    print(f"  [{i + 1:3d}/{len(events)}] {label} — empty clip (skipped)")
-                    download_errors += 1
-                    continue
-                total_bytes += len(mp4_bytes)
-                clips.append((i, mp4_bytes))
-                size_mb = len(mp4_bytes) / 1_000_000
-                dur = event.duration.total_seconds()
-                print(
-                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB ({dur:.0f}s)",
-                    flush=True,
-                )
-
-                (dump_dir / filename).write_bytes(mp4_bytes)
-            except Exception as e:
-                print(f"  [{i + 1:3d}/{len(events)}] {label} — ERROR: {e}")
-                download_errors += 1
-
-        total_mb = total_bytes / 1_000_000
-        downloaded = len(clips) - cached_count
-        print(
-            f"\n       {downloaded} downloaded, {cached_count} cached"
-            f" — {len(clips)}/{len(events)} clips ({total_mb:.1f} MB total)"
-        )
-        if download_errors:
-            print(f"       {download_errors} download errors")
-        print()
-
+        Returns (clip_reports, detection_count, total_frames).
+        """
         fps = self._settings.hsp_fps_sample
         print(f"[3/4] Analyzing frames for high-speed persons (fps={fps})...")
         detection_count = 0
@@ -503,8 +340,8 @@ class Monitor:
                 )
                 continue
 
-            tracks = hsp_detector.detect_all_tracks(frames)
-            detection = hsp_detector.detect(frames)
+            tracks = self._hsp_detector.detect_all_tracks(frames)
+            detection = self._hsp_detector.detect(frames)
 
             # Log all track displacements for threshold tuning
             for t_idx, track in enumerate(tracks):
@@ -552,54 +389,80 @@ class Monitor:
                 flush=True,
             )
 
-        if use_claude:
-            print(f"\n[3.5/4] Verifying detections with Claude Vision (fps={fps})...")
-            verifier = ClaudeVerifier(
-                api_key=self._settings.anthropic_api_key,
-                model=self._settings.claude_vision_model,
-                crop_padding=self._settings.crop_padding,
+        return clip_reports, detection_count, total_frames
+
+    def _verify_with_claude(
+        self,
+        clip_reports: list[ClipReport],
+        keep_rejected: bool,
+    ) -> tuple[list[ClipReport], int]:
+        """Step 3.5: Claude verification.
+
+        Returns (updated_clip_reports, detection_count).
+        """
+        print("\n[3.5/4] Verifying detections with Claude Vision...")
+        verifier = ClaudeVerifier(
+            api_key=self._settings.anthropic_api_key,
+            model=self._settings.claude_vision_model,
+            crop_padding=self._settings.crop_padding,
+        )
+        confirmed_count = 0
+        rejected_count = 0
+        for idx, report in enumerate(clip_reports):
+            if not report.class_detections:
+                continue
+            verified = verifier.verify_detections(report.class_detections)
+            rejected_in_clip = len(report.class_detections) - len(verified)
+            confirmed_count += len(verified)
+            rejected_count += rejected_in_clip
+
+            if keep_rejected:
+                new_class_dets = report.class_detections
+            else:
+                new_class_dets = verified
+
+            # Pick best confirmed detection (or None if all rejected)
+            confirmed_dets = [
+                d for d in new_class_dets.values() if d.verification_status == "confirmed"
+            ]
+            error_dets = [d for d in new_class_dets.values() if d.verification_status is None]
+            candidates = confirmed_dets + error_dets
+            new_best = max(candidates, key=lambda d: d.confidence) if candidates else None
+
+            clip_reports[idx] = ClipReport(
+                event_time=report.event_time,
+                mp4_filename=report.mp4_filename,
+                best_detection=new_best,
+                class_detections=new_class_dets,
             )
-            confirmed_count = 0
-            rejected_count = 0
-            for idx, report in enumerate(clip_reports):
-                if not report.class_detections:
-                    continue
-                verified = verifier.verify_detections(report.class_detections)
-                rejected_in_clip = len(report.class_detections) - len(verified)
-                confirmed_count += len(verified)
-                rejected_count += rejected_in_clip
+        print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
 
-                if claude_keep_rejected:
-                    new_class_dets = report.class_detections
-                else:
-                    new_class_dets = verified
+        detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
+        return clip_reports, detection_count
 
-                confirmed_dets = [
-                    d for d in new_class_dets.values() if d.verification_status == "confirmed"
-                ]
-                error_dets = [d for d in new_class_dets.values() if d.verification_status is None]
-                candidates = confirmed_dets + error_dets
-                new_best = max(candidates, key=lambda d: d.confidence) if candidates else None
-
-                clip_reports[idx] = ClipReport(
-                    event_time=report.event_time,
-                    mp4_filename=report.mp4_filename,
-                    best_detection=new_best,
-                    class_detections=new_class_dets,
-                )
-            print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
-
-            detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
-
+    def _generate_and_send_report(
+        self,
+        clip_reports: list[ClipReport],
+        date_str: str,
+        mode: str,
+        title: str,
+        send_email: bool,
+        label: str,
+    ) -> tuple[Path, str | None]:
+        """Step 4: Generate HTML report and optionally send email."""
         print("\n[4/4] Generating HTML report...")
         html = generate_report(
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
-            title="HSP Detection Report",
-            mode="hsp",
+            title=title,
+            mode=mode,
         )
-        report_path = Path("output") / f"report-hsp-{date_str}.html"
+
+        if mode == "present":
+            report_path = Path("output") / f"report-{date_str}.html"
+        else:
+            report_path = Path("output") / f"report-{mode}-{date_str}.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
@@ -612,14 +475,176 @@ class Monitor:
                 clip_reports,
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
-                title="HSP Detection Report",
-                mode="hsp",
+                title=title,
+                mode=mode,
             )
-            email_id = self._email.send_report(email_html, f"HSP Detection Report — {label}")
+            email_id = self._email.send_report(email_html, f"{title} — {label}")
             if email_id:
                 print(f"       Email sent ({email_id})")
             else:
                 print("       Email FAILED")
+
+        return report_path, email_id
+
+    @staticmethod
+    def _merge_clip_reports(
+        veh_reports: list[ClipReport],
+        hsp_reports: list[ClipReport],
+    ) -> list[ClipReport]:
+        """Merge VEH and HSP reports by mp4_filename.
+
+        Keys in class_detections are naturally disjoint (Motorcycle/Bicycle vs HSP).
+        """
+        hsp_by_file: dict[str, ClipReport] = {r.mp4_filename: r for r in hsp_reports}
+        merged: list[ClipReport] = []
+        for veh in veh_reports:
+            hsp = hsp_by_file.get(veh.mp4_filename)
+            if hsp is None:
+                merged.append(veh)
+                continue
+
+            combined_dets = {**veh.class_detections, **hsp.class_detections}
+
+            # Pick best detection across both modes
+            candidates = list(combined_dets.values())
+            confirmed = [d for d in candidates if d.verification_status == "confirmed"]
+            unverified = [d for d in candidates if d.verification_status is None]
+            best_pool = confirmed + unverified
+            best = max(best_pool, key=lambda d: d.confidence) if best_pool else None
+
+            merged.append(
+                ClipReport(
+                    event_time=veh.event_time,
+                    mp4_filename=veh.mp4_filename,
+                    best_detection=best,
+                    class_detections=combined_dets,
+                )
+            )
+        return merged
+
+    # ── Public run methods ───────────────────────────────────────────
+
+    def run_present(
+        self,
+        send_email: bool = False,
+        target_date: date | None = None,
+    ) -> None:
+        """Present mode: run both VEH + HSP with Claude verification."""
+        start, end, label = self._resolve_daylight_span(target_date, "DETECTION REPORT")
+
+        events = self._fetch_events(start, end)
+        if not events:
+            print("No events to process.")
+            return
+
+        if target_date is not None:
+            date_str = target_date.isoformat()
+        else:
+            date_str = start.astimezone().strftime("%Y-%m-%d")
+
+        clips, total_mb = self._download_clips(events)
+
+        veh_reports, veh_count, veh_frames = self._detect_veh(clips, events)
+        hsp_reports, hsp_count, hsp_frames = self._detect_hsp(clips, events)
+
+        merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
+
+        merged_reports, detection_count = self._verify_with_claude(merged_reports, False)
+
+        report_path, email_id = self._generate_and_send_report(
+            merged_reports, date_str, "present", "Detection Report", send_email, label
+        )
+
+        print(f"\n{'=' * 60}")
+        print("  DETECTION COMPLETE")
+        print(f"  Events:     {len(events)}")
+        print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
+        print(f"  Frames:     {veh_frames} VEH + {hsp_frames} HSP analyzed")
+        print(f"  Detections: {detection_count}")
+        print(f"  Report:     {report_path.resolve()}")
+        if send_email:
+            print(f"  Email:      {'sent' if email_id else 'failed'}")
+        dump_dir = Path("output") / "video"
+        print(f"  Clips:      {dump_dir.resolve()}")
+        print(f"{'=' * 60}\n")
+
+    def run_debug_veh(
+        self,
+        send_email: bool = False,
+        target_date: date | None = None,
+        use_claude: bool = False,
+        claude_keep_rejected: bool = False,
+    ) -> None:
+        """Debug mode: download and analyze events (VEH detection)."""
+        start, end, label = self._resolve_daylight_span(target_date, "VEH DETECTION")
+
+        events = self._fetch_events(start, end)
+        if not events:
+            print("No events to process.")
+            return
+
+        if target_date is not None:
+            date_str = target_date.isoformat()
+        else:
+            date_str = start.astimezone().strftime("%Y-%m-%d")
+
+        clips, total_mb = self._download_clips(events)
+        clip_reports, detection_count, total_frames = self._detect_veh(clips, events)
+
+        if use_claude:
+            clip_reports, detection_count = self._verify_with_claude(
+                clip_reports, claude_keep_rejected
+            )
+
+        report_path, email_id = self._generate_and_send_report(
+            clip_reports, date_str, "veh", "VEH Detection Report", send_email, label
+        )
+
+        print(f"\n{'=' * 60}")
+        print("  VEH DETECTION COMPLETE")
+        print(f"  Events:     {len(events)}")
+        print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
+        print(f"  Frames:     {total_frames} analyzed")
+        print(f"  Detections: {detection_count}")
+        print(f"  Report:     {report_path.resolve()}")
+        if send_email:
+            print(f"  Email:      {'sent' if email_id else 'failed'}")
+        dump_dir = Path("output") / "video"
+        print(f"  Clips:      {dump_dir.resolve()}")
+        print(f"{'=' * 60}\n")
+
+    def run_debug_hsp(
+        self,
+        send_email: bool = False,
+        target_date: date | None = None,
+        use_claude: bool = False,
+        claude_keep_rejected: bool = False,
+    ) -> None:
+        """Debug mode: run with experimental HSP detection."""
+        start, end, label = self._resolve_daylight_span(target_date, "HSP DETECTION (experimental)")
+
+        events = self._fetch_events(start, end)
+        if not events:
+            print("No events to process.")
+            return
+
+        if target_date is not None:
+            date_str = target_date.isoformat()
+        else:
+            date_str = start.astimezone().strftime("%Y-%m-%d")
+
+        clips, total_mb = self._download_clips(events)
+        clip_reports, detection_count, total_frames = self._detect_hsp(clips, events)
+
+        if use_claude:
+            clip_reports, detection_count = self._verify_with_claude(
+                clip_reports, claude_keep_rejected
+            )
+
+        fps = self._settings.hsp_fps_sample
+        report_path, email_id = self._generate_and_send_report(
+            clip_reports, date_str, "hsp", "HSP Detection Report", send_email, label
+        )
 
         print(f"\n{'=' * 60}")
         print("  HSP DETECTION COMPLETE")
@@ -630,6 +655,7 @@ class Monitor:
         print(f"  Report:     {report_path.resolve()}")
         if send_email:
             print(f"  Email:      {'sent' if email_id else 'failed'}")
+        dump_dir = Path("output") / "video"
         print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'=' * 60}\n")
 
@@ -638,29 +664,42 @@ def main() -> None:
     args = parse_args()
     settings = Settings()  # type: ignore[call-arg]
 
-    if args.claude and not settings.anthropic_api_key:
-        logger.error("--claude requires ANTHROPIC_API_KEY to be set in .env")
-        raise SystemExit(1)
-
     target_date: date | None = None
     if args.date:
         target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
 
-    monitor = Monitor(settings)
+    if args.debug:
+        # Debug mode
+        if args.claude and not settings.anthropic_api_key:
+            logger.error("--claude requires ANTHROPIC_API_KEY to be set in .env")
+            raise SystemExit(1)
 
-    if args.veh:
-        monitor.run(
+        monitor = Monitor(settings)
+
+        if args.veh:
+            monitor.run_debug_veh(
+                send_email=args.email,
+                target_date=target_date,
+                use_claude=args.claude,
+                claude_keep_rejected=args.claude_keep_rejected,
+            )
+        elif args.hsp:
+            monitor.run_debug_hsp(
+                send_email=args.email,
+                target_date=target_date,
+                use_claude=args.claude,
+                claude_keep_rejected=args.claude_keep_rejected,
+            )
+    else:
+        # Present mode (default)
+        if not settings.anthropic_api_key:
+            logger.error("Present mode requires ANTHROPIC_API_KEY to be set in .env")
+            raise SystemExit(1)
+
+        monitor = Monitor(settings)
+        monitor.run_present(
             send_email=args.email,
             target_date=target_date,
-            use_claude=args.claude,
-            claude_keep_rejected=args.claude_keep_rejected,
-        )
-    elif args.hsp:
-        monitor.run_hsp(
-            send_email=args.email,
-            target_date=target_date,
-            use_claude=args.claude,
-            claude_keep_rejected=args.claude_keep_rejected,
         )
 
 

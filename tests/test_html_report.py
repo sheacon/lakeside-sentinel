@@ -229,3 +229,97 @@ class TestGenerateReport:
         report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
         html = generate_report([report], mode="hsp")
         assert "320 px/sec" in html
+
+
+class TestPresentModeReport:
+    def test_sorted_chronologically(self) -> None:
+        early = _make_detection("Motorcycle", 0.9)
+        late = _make_detection("Motorcycle", 0.3)
+        reports = [
+            _make_clip_report(hour=14, best=late, class_detections={"Motorcycle": late}),
+            _make_clip_report(hour=10, best=early, class_detections={"Motorcycle": early}),
+        ]
+        html = generate_report(reports, mode="present")
+        # Times display in local time; get the expected local time strings
+        early_time = datetime(2026, 2, 28, 10, 0, 0, tzinfo=timezone.utc)
+        late_time = datetime(2026, 2, 28, 14, 0, 0, tzinfo=timezone.utc)
+        early_str = early_time.astimezone().strftime("%H:%M:%S")
+        late_str = late_time.astimezone().strftime("%H:%M:%S")
+        pos_early = html.index(early_str)
+        pos_late = html.index(late_str)
+        assert pos_early < pos_late
+
+    def test_sort_label_says_chronologically(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
+        html = generate_report(reports, mode="present")
+        assert "sorted chronologically" in html
+        assert "sorted by motorcycle confidence" not in html
+
+    def test_hides_actual_class_names(self) -> None:
+        moto = _make_detection("Motorcycle", 0.9)
+        hsp = _make_detection("HSP", 0.5, speed=300.0)
+        report = _make_clip_report(
+            hour=10,
+            best=moto,
+            class_detections={"Motorcycle": moto, "HSP": hsp},
+        )
+        html = generate_report([report], mode="present")
+        assert "Potential Motorized Vehicle" in html
+        assert ">Motorcycle<" not in html
+        assert ">HSP<" not in html
+
+    def test_hides_confidence_percentages(self) -> None:
+        det = _make_detection("Motorcycle", 0.85)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        assert "85%" not in html
+
+    def test_hides_speed_metrics(self) -> None:
+        det = _make_detection("HSP", 0.5, speed=320.0)
+        report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
+        html = generate_report([report], mode="present")
+        assert "px/sec" not in html
+
+    def test_hides_claude_badges(self) -> None:
+        det = _make_detection("Motorcycle", 0.9)
+        det.verification_status = "confirmed"
+        det.verification_response = "yes this is a motorcycle"
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        assert "Claude verified" not in html
+        assert "Claude rejected" not in html
+        assert "Claude:" not in html
+
+    def test_best_detection_shows_generic_label(self) -> None:
+        det = _make_detection("Motorcycle", 0.9)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        # Best detection summary should show generic label, not class name
+        assert "Potential Motorized Vehicle" in html
+
+    def test_no_detection_shows_generic_message(self) -> None:
+        det = _make_detection("Motorcycle", 0.5)
+        # Create a report where best_detection is None but has class_detections
+        report = _make_clip_report(hour=10, best=None, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        assert "No detection" in html
+        assert "No detection above threshold" not in html
+
+    def test_shows_cropped_images(self) -> None:
+        det = _make_detection("Motorcycle", 0.85)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        assert "data:image/png;base64," in html
+
+    def test_mixed_veh_and_hsp_in_one_clip(self) -> None:
+        moto = _make_detection("Motorcycle", 0.9)
+        hsp = _make_detection("HSP", 0.5, speed=300.0)
+        report = _make_clip_report(
+            hour=10,
+            best=moto,
+            class_detections={"Motorcycle": moto, "HSP": hsp},
+        )
+        html = generate_report([report], mode="present")
+        # Should have two cards, both labeled "Potential Motorized Vehicle"
+        assert html.count("Potential Motorized Vehicle") >= 2
