@@ -47,6 +47,30 @@ python -m lakeside_sentinel --hsp --email  # HSP detection with email report
 
 Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
 
+## Tuning
+
+`scripts/tune_detection.py` sweeps detection parameters on a video clip via CLI flags. Multi-value flags create a Cartesian product sweep.
+
+```bash
+# Vehicle mode — sweep models, FPS, and confidence thresholds
+python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
+    --model yolo26s.pt yolo26m.pt \
+    --fps 2 4 8 \
+    --confidence 0.3 0.4 0.5 \
+    --roi-y-start 0.0 --roi-y-end 0.28 \
+    --roi-x-start 0.33 --roi-x-end 1.0
+
+# HSP mode — sweep displacement thresholds and person confidence
+python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
+    --hsp \
+    --fps 4 8 \
+    --hsp-displacement 40.0 60.0 80.0 \
+    --hsp-person-confidence 0.3 0.4 \
+    --hsp-max-match-distance 150.0 200.0
+```
+
+Annotated images are saved to `output/tune/{clip_stem}/`. Results are printed as a table to stdout.
+
 ## Testing
 
 ```bash
