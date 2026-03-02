@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import httpx
 import isodate
 
-from lakeside_motorbikes.camera.auth import NestAuth
-from lakeside_motorbikes.camera.models import CameraEvent
+from lakeside_sentinel.camera.auth import NestAuth
+from lakeside_sentinel.camera.models import CameraEvent
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from lakeside_motorbikes.camera.nest_api import _format_iso, _parse_events
+from lakeside_sentinel.camera.nest_api import _format_iso, _parse_events
 
 
 class TestFormatIso:

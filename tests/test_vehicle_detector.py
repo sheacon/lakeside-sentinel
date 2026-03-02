@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
+from lakeside_sentinel.detection.vehicle_detector import VehicleDetector
 
 
 def _make_mock_box(cls: int, conf: float, xyxy: list[float]) -> MagicMock:
@@ -27,12 +27,12 @@ def dummy_frame() -> np.ndarray:
 
 
 class TestVehicleDetector:
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_no_frames_returns_none(self, mock_yolo_cls: MagicMock) -> None:
         detector = VehicleDetector()
         assert detector.detect_best([]) is None
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_no_vehicle_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -43,7 +43,7 @@ class TestVehicleDetector:
         detector = VehicleDetector()
         assert detector.detect_best([dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_low_confidence_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -53,7 +53,7 @@ class TestVehicleDetector:
         detector = VehicleDetector(confidence_threshold=0.4)
         assert detector.detect_best([dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detects_motorcycle(self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray) -> None:
         box = _make_mock_box(cls=3, conf=0.75, xyxy=[50, 50, 200, 200])
         mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
@@ -66,7 +66,7 @@ class TestVehicleDetector:
         assert detection.bbox == (50, 50, 200, 200)
         assert detection.class_name == "Motorcycle"
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_ignores_car(self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray) -> None:
         box = _make_mock_box(cls=2, conf=0.8, xyxy=[10, 10, 300, 300])
         mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
@@ -74,7 +74,7 @@ class TestVehicleDetector:
         detector = VehicleDetector(confidence_threshold=0.4)
         assert detector.detect_best([dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detects_bicycle(self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray) -> None:
         box = _make_mock_box(cls=1, conf=0.6, xyxy=[10, 10, 200, 200])
         mock_yolo_cls.return_value.return_value = [_make_mock_result([box])]
@@ -85,14 +85,14 @@ class TestVehicleDetector:
         assert detection is not None
         assert detection.class_name == "Bicycle"
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detailed_no_frames_returns_none_and_empty_dict(self, mock_yolo_cls: MagicMock) -> None:
         detector = VehicleDetector()
         detection, class_max = detector.detect_detailed([])
         assert detection is None
         assert class_max == {}
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detailed_returns_best_and_per_class_best(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -113,7 +113,7 @@ class TestVehicleDetector:
         assert class_best["Motorcycle"].confidence == 0.82
         assert class_best["Bicycle"].confidence == 0.31
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detailed_no_vehicles_returns_empty_dict(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -125,7 +125,7 @@ class TestVehicleDetector:
         assert detection is None
         assert class_best == {}
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_detailed_includes_sub_threshold_in_breakdown(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -144,7 +144,7 @@ class TestVehicleDetector:
         assert class_best["Motorcycle"].confidence == 0.7
         assert class_best["Bicycle"].confidence == 0.15
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_returns_highest_confidence_across_types(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -163,7 +163,7 @@ class TestVehicleDetector:
         assert detection.bbox == (100, 100, 300, 300)
         assert detection.class_name == "Motorcycle"
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_batched_inference_splits_frames(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -192,8 +192,8 @@ class TestVehicleDetector:
 
 
 class TestEmptyMpsCache:
-    @patch("lakeside_motorbikes.detection.vehicle_detector.torch")
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.torch")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_calls_empty_cache_on_mps(
         self, mock_yolo_cls: MagicMock, mock_torch: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -207,8 +207,8 @@ class TestEmptyMpsCache:
 
         mock_torch.mps.empty_cache.assert_called_once()
 
-    @patch("lakeside_motorbikes.detection.vehicle_detector.torch")
-    @patch("lakeside_motorbikes.detection.vehicle_detector.YOLO")
+    @patch("lakeside_sentinel.detection.vehicle_detector.torch")
+    @patch("lakeside_sentinel.detection.vehicle_detector.YOLO")
     def test_skips_empty_cache_on_cpu(
         self, mock_yolo_cls: MagicMock, mock_torch: MagicMock, dummy_frame: np.ndarray
     ) -> None:

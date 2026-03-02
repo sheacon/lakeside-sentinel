@@ -3,7 +3,7 @@ requires = ["setuptools>=75.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lakeside-motorbikes"
+name = "lakeside-sentinel"
 version = "0.1.0"
 description = "Detect motorbikes on a lakeside path using a Nest Cam and YOLO, then send email alerts."
 requires-python = ">=3.12"

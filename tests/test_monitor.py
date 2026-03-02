@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lakeside_motorbikes.camera.models import CameraEvent
-from lakeside_motorbikes.config import Settings
-from lakeside_motorbikes.main import Monitor, _print_settings
+from lakeside_sentinel.camera.models import CameraEvent
+from lakeside_sentinel.config import Settings
+from lakeside_sentinel.main import Monitor, _print_settings
 
 
 def _make_event(hour: int = 12) -> CameraEvent:
@@ -60,11 +60,11 @@ class TestPrintSettings:
 
 
 class TestRunCache:
-    @patch("lakeside_motorbikes.main.webbrowser.open")
-    @patch("lakeside_motorbikes.main.NestCameraAPI")
-    @patch("lakeside_motorbikes.main.NestAuth")
-    @patch("lakeside_motorbikes.main.VehicleDetector")
-    @patch("lakeside_motorbikes.main.EmailSender")
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
     def test_cached_files_are_read_from_disk(
         self,
         mock_email_cls: MagicMock,
@@ -98,11 +98,11 @@ class TestRunCache:
         # download_clip should NOT have been called since the file was cached
         mock_api.download_clip.assert_not_called()
 
-    @patch("lakeside_motorbikes.main.webbrowser.open")
-    @patch("lakeside_motorbikes.main.NestCameraAPI")
-    @patch("lakeside_motorbikes.main.NestAuth")
-    @patch("lakeside_motorbikes.main.VehicleDetector")
-    @patch("lakeside_motorbikes.main.EmailSender")
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
     def test_missing_files_are_downloaded_and_written(
         self,
         mock_email_cls: MagicMock,

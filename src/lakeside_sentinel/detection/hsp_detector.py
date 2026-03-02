@@ -12,7 +12,7 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 
-from lakeside_motorbikes.detection.models import Detection
+from lakeside_sentinel.detection.models import Detection
 
 logger = logging.getLogger(__name__)
 

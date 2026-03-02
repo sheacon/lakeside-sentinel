@@ -11,10 +11,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from lakeside_motorbikes.detection.models import Detection
-from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
-from lakeside_motorbikes.utils.image import crop_to_roi
-from lakeside_motorbikes.utils.video import extract_frames
+from lakeside_sentinel.detection.models import Detection
+from lakeside_sentinel.detection.vehicle_detector import VehicleDetector
+from lakeside_sentinel.utils.image import crop_to_roi
+from lakeside_sentinel.utils.video import extract_frames
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)

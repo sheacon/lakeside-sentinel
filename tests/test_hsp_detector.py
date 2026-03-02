@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from lakeside_motorbikes.detection.hsp_detector import (
+from lakeside_sentinel.detection.hsp_detector import (
     HSPDetector,
     PersonTrack,
     TrackPoint,
@@ -83,7 +83,7 @@ class TestPersonTrack:
 
 
 class TestTrackBuilding:
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_single_person_across_frames_one_track(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -109,7 +109,7 @@ class TestTrackBuilding:
         assert len(tracks) == 1
         assert len(tracks[0].points) == 3
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_two_people_tracked_independently(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -130,7 +130,7 @@ class TestTrackBuilding:
 
         assert len(tracks) == 2
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_person_disappears_track_finalized(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -156,7 +156,7 @@ class TestTrackBuilding:
         assert len(tracks) == 1
         assert len(tracks[0].points) == 1
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_centroids_too_far_separate_tracks(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -184,7 +184,7 @@ class TestTrackBuilding:
         assert len(tracks) == 2
         assert all(len(t.points) == 1 for t in tracks)
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_empty_frames_no_tracks(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -201,19 +201,19 @@ class TestTrackBuilding:
 
         assert len(tracks) == 0
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_no_frames_returns_empty(self, mock_yolo_cls: MagicMock) -> None:
         detector = HSPDetector()
         assert detector.detect_all_tracks([]) == []
 
 
 class TestHSPDetector:
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_no_frames_returns_none(self, mock_yolo_cls: MagicMock) -> None:
         detector = HSPDetector()
         assert detector.detect([]) is None
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_no_persons_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -227,7 +227,7 @@ class TestHSPDetector:
         detector = HSPDetector(person_confidence=0.4)
         assert detector.detect([dummy_frame, dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_slow_person_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -251,7 +251,7 @@ class TestHSPDetector:
         )
         assert detector.detect([dummy_frame] * 3) is None
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_fast_person_detected_as_hsp(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -279,7 +279,7 @@ class TestHSPDetector:
         assert detection.class_name == "HSP"
         assert detection.confidence == 0.85  # best confidence in track
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_multiple_people_only_fast_one_flagged(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -317,7 +317,7 @@ class TestHSPDetector:
         # The fast person's bbox should be around x=400-560 range
         assert detection.bbox[0] >= 400
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_single_frame_person_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -337,7 +337,7 @@ class TestHSPDetector:
         # Only one frame → track has 1 point → can't compute displacement
         assert detector.detect([dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    @patch("lakeside_sentinel.detection.hsp_detector.YOLO")
     def test_low_confidence_person_filtered(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:

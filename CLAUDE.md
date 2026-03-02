@@ -1,11 +1,11 @@
-# Lakeside Motorbikes
+# Lakeside Sentinel
 
 Vehicle detection and alert system that monitors a Google Nest camera using YOLO object detection and sends email alerts via Resend. Detects bicycles and motorcycles.
 
 ## Architecture
 
 ```
-src/lakeside_motorbikes/
+src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & daily run logic
 ├── cli.py                 # CLI argument parser (--date, --email, --hsp)
 ├── config.py              # Pydantic settings from .env
@@ -38,20 +38,20 @@ cp .env.example .env  # then fill in credentials
 ## Running
 
 ```bash
-python -m lakeside_motorbikes              # analyze most recent daylight period
-python -m lakeside_motorbikes --email      # also send an email report (no embedded videos)
-python -m lakeside_motorbikes --date 2026-02-28  # analyze a specific date's daylight
-python -m lakeside_motorbikes --hsp        # experimental HSP detection
-python -m lakeside_motorbikes --hsp --email  # HSP detection with email report
+python -m lakeside_sentinel              # analyze most recent daylight period
+python -m lakeside_sentinel --email      # also send an email report (no embedded videos)
+python -m lakeside_sentinel --date 2026-02-28  # analyze a specific date's daylight
+python -m lakeside_sentinel --hsp        # experimental HSP detection
+python -m lakeside_sentinel --hsp --email  # HSP detection with email report
 ```
 
-Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist` (runs daily at 21:00).
+Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
 
 ## Testing
 
 ```bash
 pytest tests/                    # tests across 9 modules
-pytest tests/ -v --cov=src/lakeside_motorbikes
+pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 
 Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixtures in `tests/fixtures/`.

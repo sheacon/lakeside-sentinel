@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from lakeside_motorbikes.notification.email_sender import EmailSender
+from lakeside_sentinel.notification.email_sender import EmailSender
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def sender() -> EmailSender:
 
 
 class TestSendReport:
-    @patch("lakeside_motorbikes.notification.email_sender.resend")
+    @patch("lakeside_sentinel.notification.email_sender.resend")
     def test_send_report_calls_resend(
         self,
         mock_resend: MagicMock,
@@ -34,7 +34,7 @@ class TestSendReport:
         assert call_args["html"] == "<h1>Report</h1>"
         assert "attachments" not in call_args
 
-    @patch("lakeside_motorbikes.notification.email_sender.resend")
+    @patch("lakeside_sentinel.notification.email_sender.resend")
     def test_send_report_returns_id_from_object(
         self,
         mock_resend: MagicMock,
@@ -49,7 +49,7 @@ class TestSendReport:
 
         assert result == "email_obj_456"
 
-    @patch("lakeside_motorbikes.notification.email_sender.resend")
+    @patch("lakeside_sentinel.notification.email_sender.resend")
     def test_send_report_handles_exception(
         self,
         mock_resend: MagicMock,

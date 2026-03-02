@@ -1,6 +1,6 @@
 import numpy as np
 
-from lakeside_motorbikes.utils.image import crop_to_bbox, crop_to_roi
+from lakeside_sentinel.utils.image import crop_to_bbox, crop_to_roi
 
 
 class TestCropToBbox:

@@ -1,6 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 
-from lakeside_motorbikes.utils.daylight import (
+from lakeside_sentinel.utils.daylight import (
     get_daylight_span,
     get_daylight_span_for_date,
     is_daylight,

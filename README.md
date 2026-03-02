@@ -1,4 +1,4 @@
-# Lakeside Motorbikes
+# Lakeside Sentinel
 
 Vehicle detection and alert system that monitors a Google Nest camera using [YOLO26](https://docs.ultralytics.com/models/yolo26/#overview) object detection and sends email alerts via Resend. Detects bicycles and motorcycles.
 
@@ -7,9 +7,9 @@ Vehicle detection and alert system that monitors a Google Nest camera using [YOL
 ## Architecture
 
 ```
-src/lakeside_motorbikes/
-├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump)
+src/lakeside_sentinel/
+├── main.py                # Monitor orchestration & daily run logic
+├── cli.py                 # CLI argument parser (--date, --email, --hsp)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -18,11 +18,12 @@ src/lakeside_motorbikes/
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
-│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), batched inference
+│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
-│   └── email_sender.py    # Resend email: single alerts + backfill summary
+│   ├── email_sender.py    # Resend email: sends pre-built HTML report
+│   └── html_report.py     # Self-contained HTML report generation
 └── utils/
-    ├── daylight.py        # Sunrise/sunset filtering via astral
+    ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
     └── video.py           # MP4 frame extraction via OpenCV
 ```
@@ -39,20 +40,75 @@ cp .env.example .env  # then fill in credentials
 ## Running
 
 ```bash
-python -m lakeside_motorbikes              # live monitoring (polls every 120s)
-python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
-python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
-python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
-python -m lakeside_motorbikes --hsp --backfill --debug-dump  # experimental HSP detection
+python -m lakeside_sentinel              # analyze most recent daylight period
+python -m lakeside_sentinel --email      # also send an email report (no embedded videos)
+python -m lakeside_sentinel --date 2026-02-28  # analyze a specific date's daylight
+python -m lakeside_sentinel --hsp        # experimental HSP detection
+python -m lakeside_sentinel --hsp --email  # HSP detection with email report
 ```
 
-Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
+## Scheduling
+
+The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs the detector with email reporting. Hook it into your preferred scheduler:
+
+**cron** (daily at 21:00):
+```bash
+0 21 * * * /path/to/lakeside-sentinel/run.sh >> /tmp/lakeside-sentinel.log 2>&1
+```
+
+**macOS LaunchAgent** (`~/Library/LaunchAgents/com.lakeside-sentinel.worker.plist`):
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lakeside-sentinel.worker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/lakeside-sentinel/run.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>21</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+</dict>
+</plist>
+```
+
+**systemd** (`~/.config/systemd/user/lakeside-sentinel.service` + `.timer`):
+```ini
+# lakeside-sentinel.service
+[Unit]
+Description=Lakeside Sentinel detection run
+
+[Service]
+Type=oneshot
+ExecStart=/path/to/lakeside-sentinel/run.sh
+```
+
+```ini
+# lakeside-sentinel.timer
+[Unit]
+Description=Run Lakeside Sentinel daily at 21:00
+
+[Timer]
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
 
 ## Testing
 
 ```bash
 pytest tests/
-pytest tests/ -v --cov=src/lakeside_motorbikes
+pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 
 Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixtures in `tests/fixtures/`.
@@ -92,4 +148,3 @@ See `.env.example` for the full list. Key variables:
 | `HSP_DISPLACEMENT_THRESHOLD` | `60.0` | Min centroid displacement (px/interval) to flag as HSP |
 | `HSP_PERSON_CONFIDENCE` | `0.4` | Min YOLO person confidence for tracking |
 | `HSP_MAX_MATCH_DISTANCE` | `200.0` | Max centroid distance (px) for track matching |
-| `POLL_INTERVAL_SECONDS` | `120` | Seconds between event polls |

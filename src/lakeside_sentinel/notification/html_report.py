@@ -10,8 +10,8 @@ from datetime import datetime
 import cv2
 import numpy as np
 
-from lakeside_motorbikes.detection.models import Detection
-from lakeside_motorbikes.utils.image import crop_to_bbox
+from lakeside_sentinel.detection.models import Detection
+from lakeside_sentinel.utils.image import crop_to_bbox
 
 logger = logging.getLogger(__name__)
 

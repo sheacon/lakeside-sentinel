@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 
 import numpy as np
 
-from lakeside_motorbikes.detection.models import Detection
-from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
+from lakeside_sentinel.detection.models import Detection
+from lakeside_sentinel.notification.html_report import ClipReport, generate_report
 
 
 def _make_detection(

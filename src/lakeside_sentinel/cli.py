@@ -3,7 +3,7 @@ import argparse
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Lakeside Motorbikes — Detection & Alert System",
+        description="Lakeside Sentinel — Detection & Alert System",
     )
     parser.add_argument(
         "--date",

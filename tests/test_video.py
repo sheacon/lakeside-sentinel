@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from lakeside_motorbikes.utils.video import extract_frames
+from lakeside_sentinel.utils.video import extract_frames
 
 
 def _create_test_mp4(num_frames: int = 30, fps: float = 30.0) -> bytes:

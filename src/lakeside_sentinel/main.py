@@ -5,23 +5,23 @@ import webbrowser
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from lakeside_motorbikes.camera.auth import NestAuth
-from lakeside_motorbikes.camera.models import CameraEvent
-from lakeside_motorbikes.camera.nest_api import NestCameraAPI
-from lakeside_motorbikes.cli import parse_args
-from lakeside_motorbikes.config import Settings
-from lakeside_motorbikes.detection.hsp_detector import HSPDetector
-from lakeside_motorbikes.detection.models import Detection
-from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
-from lakeside_motorbikes.notification.email_sender import EmailSender
-from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
-from lakeside_motorbikes.utils.daylight import (
+from lakeside_sentinel.camera.auth import NestAuth
+from lakeside_sentinel.camera.models import CameraEvent
+from lakeside_sentinel.camera.nest_api import NestCameraAPI
+from lakeside_sentinel.cli import parse_args
+from lakeside_sentinel.config import Settings
+from lakeside_sentinel.detection.hsp_detector import HSPDetector
+from lakeside_sentinel.detection.models import Detection
+from lakeside_sentinel.detection.vehicle_detector import VehicleDetector
+from lakeside_sentinel.notification.email_sender import EmailSender
+from lakeside_sentinel.notification.html_report import ClipReport, generate_report
+from lakeside_sentinel.utils.daylight import (
     get_daylight_span,
     get_daylight_span_for_date,
     is_daylight,
 )
-from lakeside_motorbikes.utils.image import crop_to_roi
-from lakeside_motorbikes.utils.video import extract_frames
+from lakeside_sentinel.utils.image import crop_to_roi
+from lakeside_sentinel.utils.video import extract_frames
 
 logging.basicConfig(
     level=logging.INFO,
