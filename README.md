@@ -174,7 +174,7 @@ See `.env.example` for the full list. Key variables:
 | `ALERT_EMAIL_FROM` | `alerts@xeroshot.org` | Sender email address |
 | `CAMERA_LATITUDE` | — | Camera latitude (daylight filtering) |
 | `CAMERA_LONGITUDE` | — | Camera longitude (daylight filtering) |
-| `YOLO_MODEL` | `yolo26s.pt` | YOLO model weights file |
+| `YOLO_MODEL` | `yolo_models/yolo26s.pt` | YOLO model weights file |
 | `VEH_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts and report inclusion |
 | `YOLO_BATCH_SIZE` | `16` | Frames per YOLO inference batch (prevents GPU OOM) |
 | `CROP_PADDING` | `0.2` | Padding around detected bounding box |

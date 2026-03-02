@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger(__name__)
 
 # Defaults matching .env.example (avoids requiring Settings/full .env)
-DEFAULT_MODEL = "yolo26s.pt"
+DEFAULT_MODEL = "yolo_models/yolo26s.pt"
 DEFAULT_FPS = 4
 DEFAULT_DISPLACEMENT = 240.0
 DEFAULT_PERSON_CONFIDENCE = 0.4

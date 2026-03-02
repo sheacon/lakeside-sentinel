@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     alert_email_from: str = "alerts@xeroshot.org"
 
     # Object Detection Model
-    yolo_model: str = "yolo26s.pt"
+    yolo_model: str = "yolo_models/yolo26s.pt"
     yolo_batch_size: int = 16
     crop_padding: float = 0.2
 

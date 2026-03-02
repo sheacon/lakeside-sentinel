@@ -77,7 +77,7 @@ Scheduled via `run.sh` (passes `--email`) — a self-locating entry point for cr
 ```bash
 # VEH mode — sweep models, FPS, and confidence thresholds
 python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
-    --model yolo26s.pt yolo26m.pt \
+    --model yolo_models/yolo26s.pt yolo_models/yolo26m.pt \
     --fps 2 4 8 \
     --confidence 0.3 0.4 0.5 \
     --roi-y-start 0.0 --roi-y-end 0.28 \
@@ -159,7 +159,7 @@ See `.env.example` for the full list. Key variables:
 - `GOOGLE_MASTER_TOKEN`, `GOOGLE_USERNAME`, `NEST_DEVICE_ID` - Nest auth
 - `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` - email alerts
 - `CAMERA_LATITUDE`, `CAMERA_LONGITUDE` - camera location (daylight filtering)
-- `YOLO_MODEL` (default `yolo26s.pt`) - YOLO model weights file
+- `YOLO_MODEL` (default `yolo_models/yolo26s.pt`) - YOLO model weights file
 - `VEH_CONFIDENCE_THRESHOLD` (default 0.4) - filters alerts and HTML report class detections, `YOLO_BATCH_SIZE` (default 16), `CROP_PADDING` (default 0.2)
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
@@ -176,4 +176,4 @@ See `.env.example` for the full list. Key variables:
 - `@dataclass(frozen=True)` for domain models
 - Logging via `logging.getLogger(__name__)`
 - External API calls require timeout and error handling
-- YOLO model weights (e.g. `yolo26s.pt`) are git-ignored and auto-downloaded
+- YOLO model weights live in `yolo_models/` (e.g. `yolo_models/yolo26s.pt`) — git-ignored and auto-downloaded

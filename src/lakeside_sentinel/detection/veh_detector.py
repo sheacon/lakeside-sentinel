@@ -21,7 +21,7 @@ class VEHDetector:
 
     def __init__(
         self,
-        model_name: str = "yolo26s.pt",
+        model_name: str = "yolo_models/yolo26s.pt",
         confidence_threshold: float = 0.4,
         batch_size: int = 16,
     ) -> None:

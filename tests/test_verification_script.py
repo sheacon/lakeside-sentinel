@@ -24,7 +24,7 @@ class TestBuildParser:
         assert args.runs == 3
         assert args.temperature == 0.0
         assert args.model == "claude-sonnet-4-20250514"
-        assert args.yolo_model == "yolo26s.pt"
+        assert args.yolo_model == "yolo_models/yolo26s.pt"
         assert args.fps == 2
         assert args.confidence == 0.4
         assert args.crop_padding == 0.2

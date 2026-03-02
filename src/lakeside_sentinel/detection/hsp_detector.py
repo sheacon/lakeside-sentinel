@@ -65,7 +65,7 @@ class HSPDetector:
 
     def __init__(
         self,
-        model_name: str = "yolo26s.pt",
+        model_name: str = "yolo_models/yolo26s.pt",
         person_confidence: float = 0.4,
         displacement_threshold: float = 240.0,
         max_match_distance: float = 800.0,

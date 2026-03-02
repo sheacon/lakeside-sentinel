@@ -215,7 +215,7 @@ class TestArgparse:
         args = parser.parse_args(["--clip", "test.mp4"])
         assert args.clip == Path("test.mp4")
         assert args.hsp is False
-        assert args.model == ["yolo26s.pt"]
+        assert args.model == ["yolo_models/yolo26s.pt"]
         assert args.fps is None  # defaults applied in main()
         assert args.confidence == [0.4]
         assert args.roi_y_start == 0.0

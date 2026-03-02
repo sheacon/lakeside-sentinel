@@ -19,7 +19,7 @@ htmlcov/
 
 *.mp4
 *.avi
-*.pt
+yolo_models/*.pt
 output/
 
 .DS_Store

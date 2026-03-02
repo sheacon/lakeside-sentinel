@@ -332,7 +332,7 @@ class TestPresentModeReport:
     def test_settings_not_shown_in_present_mode(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        settings = {"yolo_model": "yolo26s.pt", "veh_confidence_threshold": 0.4}
+        settings = {"yolo_model": "yolo_models/yolo26s.pt", "veh_confidence_threshold": 0.4}
         html = generate_report([report], mode="present", settings=settings)
         assert "Parameters" not in html
         assert "Yolo Model" not in html
@@ -342,11 +342,11 @@ class TestSettingsInReport:
     def test_settings_shown_in_veh_debug(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        settings = {"yolo_model": "yolo26s.pt", "veh_confidence_threshold": 0.4}
+        settings = {"yolo_model": "yolo_models/yolo26s.pt", "veh_confidence_threshold": 0.4}
         html = generate_report([report], mode="veh", settings=settings)
         assert "Parameters" in html
         assert "Yolo Model" in html
-        assert "yolo26s.pt" in html
+        assert "yolo_models/yolo26s.pt" in html
         assert "Veh Confidence Threshold" in html
 
     def test_settings_shown_in_hsp_debug(self) -> None:
@@ -361,13 +361,13 @@ class TestSettingsInReport:
         settings = {
             "google_master_token": "secret123",
             "resend_api_key": "re_live_abc",
-            "yolo_model": "yolo26s.pt",
+            "yolo_model": "yolo_models/yolo26s.pt",
         }
         html = generate_report([], mode="veh", settings=settings)
         assert "secret123" not in html
         assert "re_live_abc" not in html
         assert "****" in html
-        assert "yolo26s.pt" in html
+        assert "yolo_models/yolo26s.pt" in html
 
     def test_no_settings_block_when_none(self) -> None:
         html = generate_report([], mode="veh")

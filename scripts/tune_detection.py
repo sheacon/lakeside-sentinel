@@ -419,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  # VEH mode — sweep models and FPS\n"
             "  python scripts/tune_detection.py --clip clip.mp4 "
-            "--model yolo26s.pt yolo26m.pt --fps 2 4 8\n\n"
+            "--model yolo_models/yolo26s.pt yolo_models/yolo26m.pt --fps 2 4 8\n\n"
             "  # HSP mode — sweep displacement thresholds\n"
             "  python scripts/tune_detection.py --clip clip.mp4 --hsp "
             "--fps 4 8 --hsp-displacement 40 60 80"
@@ -438,7 +438,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         nargs="+",
         type=str,
-        default=["yolo26s.pt"],
+        default=["yolo_models/yolo26s.pt"],
         help="YOLO model weight files to sweep",
     )
     parser.add_argument(

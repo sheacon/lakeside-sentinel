@@ -92,7 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runs", type=int, default=3, help="Verification runs per detection")
     parser.add_argument("--temperature", type=float, default=0.0, help="Claude temperature")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Claude model")
-    parser.add_argument("--yolo-model", type=str, default="yolo26s.pt", help="YOLO model weights")
+    parser.add_argument(
+        "--yolo-model", type=str, default="yolo_models/yolo26s.pt", help="YOLO model weights"
+    )
     parser.add_argument("--fps", type=int, default=2, help="Frames per second to extract")
     parser.add_argument("--confidence", type=float, default=0.4, help="YOLO confidence threshold")
     parser.add_argument("--crop-padding", type=float, default=0.2, help="Bbox crop padding")
