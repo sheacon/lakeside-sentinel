@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import re
 
 import anthropic
 import cv2
@@ -81,15 +82,14 @@ class ClaudeVerifier:
                 ],
             )
             raw_text = response.content[0].text.strip()
-            answer = raw_text.lower()
             logger.info(
                 "Claude response for %s (%.0f%%): %r",
                 detection.class_name,
                 detection.confidence * 100,
-                answer,
+                raw_text,
             )
             detection.verification_response = raw_text
-            if answer.startswith("yes"):
+            if re.search(r"yes", raw_text, re.IGNORECASE):
                 detection.verification_status = "confirmed"
                 return "confirmed"
             else:

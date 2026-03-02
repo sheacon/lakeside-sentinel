@@ -69,6 +69,32 @@ class TestVerifyDetection:
         assert det.verification_response == "Yes, it is a motorcycle."
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
+    def test_confirmed_when_response_is_markdown_yes(self, mock_anthropic_cls: MagicMock) -> None:
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value = _mock_response("**Yes**")
+
+        verifier = ClaudeVerifier(api_key="test-key")
+        det = _make_detection()
+        result = verifier.verify_detection(det)
+
+        assert result == "confirmed"
+        assert det.verification_status == "confirmed"
+        assert det.verification_response == "**Yes**"
+
+    @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
+    def test_rejected_when_response_is_markdown_no(self, mock_anthropic_cls: MagicMock) -> None:
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value = _mock_response("**No**")
+
+        verifier = ClaudeVerifier(api_key="test-key")
+        det = _make_detection()
+        result = verifier.verify_detection(det)
+
+        assert result == "rejected"
+        assert det.verification_status == "rejected"
+        assert det.verification_response == "**No**"
+
+    @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_error_returns_error_and_status_none(self, mock_anthropic_cls: MagicMock) -> None:
         mock_client = mock_anthropic_cls.return_value
         mock_client.messages.create.side_effect = Exception("API timeout")
