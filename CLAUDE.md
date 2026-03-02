@@ -14,13 +14,13 @@ src/lakeside_sentinel/
 │   ├── models.py          # CameraEvent dataclass (frozen)
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
-│   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name, verification_response)
+│   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name, verification_response, speed)
 │   ├── claude_verifier.py # Claude Vision verification of YOLO detections
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
-│   └── html_report.py     # Self-contained HTML report with Claude response text
+│   └── html_report.py     # Self-contained HTML report; mode-aware sorting (VEH by confidence, HSP by speed)
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
