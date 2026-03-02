@@ -6,20 +6,15 @@ def parse_args() -> argparse.Namespace:
         description="Lakeside Motorbikes — Detection & Alert System",
     )
     parser.add_argument(
-        "--backfill",
-        action="store_true",
-        help="Analyze the most recent daylight period (sunrise-to-sunset).",
-    )
-    parser.add_argument(
         "--date",
         type=str,
         default=None,
-        help="Backfill a specific date (YYYY-MM-DD). Analyzes that day's sunrise-to-sunset.",
+        help="Analyze a specific date (YYYY-MM-DD). Defaults to the most recent daylight period.",
     )
     parser.add_argument(
-        "--debug-dump",
+        "--email",
         action="store_true",
-        help="Backfill mode: save all MP4 clips to a timestamped folder for manual inspection.",
+        help="Send an email report (HTML without embedded videos).",
     )
     parser.add_argument(
         "--hsp",

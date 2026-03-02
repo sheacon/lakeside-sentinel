@@ -6,8 +6,8 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 
 ```
 src/lakeside_motorbikes/
-├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump, --hsp)
+├── main.py                # Monitor orchestration & daily run logic
+├── cli.py                 # CLI argument parser (--date, --email, --hsp)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -18,7 +18,8 @@ src/lakeside_motorbikes/
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
-│   └── email_sender.py    # Resend email: single alerts + backfill summary
+│   ├── email_sender.py    # Resend email: sends pre-built HTML report
+│   └── html_report.py     # Self-contained HTML report generation
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
@@ -37,19 +38,19 @@ cp .env.example .env  # then fill in credentials
 ## Running
 
 ```bash
-python -m lakeside_motorbikes              # live monitoring (polls every 120s)
-python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
-python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
-python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
-python -m lakeside_motorbikes --hsp --backfill --debug-dump  # experimental HSP detection
+python -m lakeside_motorbikes              # analyze most recent daylight period
+python -m lakeside_motorbikes --email      # also send an email report (no embedded videos)
+python -m lakeside_motorbikes --date 2026-02-28  # analyze a specific date's daylight
+python -m lakeside_motorbikes --hsp        # experimental HSP detection
+python -m lakeside_motorbikes --hsp --email  # HSP detection with email report
 ```
 
-Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
+Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist` (runs daily at 21:00).
 
 ## Testing
 
 ```bash
-pytest tests/                    # 94 tests across 9 modules
+pytest tests/                    # tests across 9 modules
 pytest tests/ -v --cov=src/lakeside_motorbikes
 ```
 
@@ -76,7 +77,6 @@ See `.env.example` for the full list. Key variables:
 - `FPS_SAMPLE` (default 2) - frames extracted per second of video
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
-- `POLL_INTERVAL_SECONDS` (default 120)
 
 ## Conventions
 

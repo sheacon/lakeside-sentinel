@@ -38,6 +38,3 @@ class Settings(BaseSettings):
     hsp_displacement_threshold: float = 60.0
     hsp_person_confidence: float = 0.4
     hsp_max_match_distance: float = 200.0
-
-    # Polling
-    poll_interval_seconds: int = 120

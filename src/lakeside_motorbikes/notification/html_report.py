@@ -1,4 +1,4 @@
-"""Self-contained HTML debug report for backfill analysis."""
+"""Self-contained HTML report for daily detection analysis."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import base64
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -41,18 +40,18 @@ def _encode_cropped_png(
 
 def generate_report(
     clip_reports: list[ClipReport],
-    output_dir: Path,
     crop_padding: float = 0.2,
-) -> Path:
-    """Generate a self-contained HTML debug report.
+    include_video: bool = True,
+) -> str:
+    """Generate a self-contained HTML report.
 
     Args:
         clip_reports: Analysis results for each clip.
-        output_dir: Directory to write the report into (also contains MP4s).
         crop_padding: Padding fraction for cropping detection images.
+        include_video: Whether to include video player elements.
 
     Returns:
-        Path to the generated report.html file.
+        The generated HTML string.
     """
     # Filter out clips where no class meets the minimum threshold
     min_threshold = 0.01
@@ -121,16 +120,22 @@ def generate_report(
         else:
             best_str = '<span style="color:#94a3b8">No detection above threshold</span>'
 
+        video_html = ""
+        if include_video:
+            video_html = (
+                f'<video controls preload="metadata" style="max-width:100%;max-height:300px;'
+                f'border-radius:6px;margin-top:6px">'
+                f'<source src="{report.mp4_filename}" type="video/mp4" />'
+                f"</video>"
+            )
+
         sections.append(
             f'<div style="border-left:4px solid {border_color};background:{bg_color};'
             f'padding:12px 16px;margin-bottom:16px;border-radius:0 8px 8px 0">'
             f'<h3 style="margin:0 0 8px">{time_str} &mdash; '
             f'<code style="font-size:0.85em">{report.mp4_filename}</code></h3>'
             f'<p style="margin:4px 0">{best_str}</p>'
-            f'<video controls preload="metadata" style="max-width:100%;max-height:300px;'
-            f'border-radius:6px;margin-top:6px">'
-            f'<source src="{report.mp4_filename}" type="video/mp4" />'
-            f"</video>"
+            f"{video_html}"
             f"{cards_html}"
             f"</div>"
         )
@@ -138,21 +143,18 @@ def generate_report(
     html = (
         "<!DOCTYPE html>"
         '<html lang="en"><head><meta charset="utf-8"/>'
-        "<title>Backfill Debug Report</title>"
+        "<title>Daily Detection Report</title>"
         '<meta name="viewport" content="width=device-width,initial-scale=1"/>'
         "<style>"
         "body{font-family:system-ui,sans-serif;max-width:900px;"
         "margin:0 auto;padding:20px;background:#fff}"
         "h1{margin-bottom:4px} .stats{color:#64748b;margin-bottom:24px}"
         "</style></head><body>"
-        "<h1>Backfill Debug Report</h1>"
+        "<h1>Daily Detection Report</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
         f"{detected_clips} with detections (sorted by motorcycle confidence)</p>"
         + "".join(sections)
         + "</body></html>"
     )
 
-    output_path = output_dir / "report.html"
-    output_path.write_text(html)
-    logger.info("HTML report written to %s", output_path)
-    return output_path
+    return html

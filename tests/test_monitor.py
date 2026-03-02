@@ -59,7 +59,7 @@ class TestPrintSettings:
         assert mock_settings.alert_email_to in output
 
 
-class TestBackfillCache:
+class TestRunCache:
     @patch("lakeside_motorbikes.main.webbrowser.open")
     @patch("lakeside_motorbikes.main.NestCameraAPI")
     @patch("lakeside_motorbikes.main.NestAuth")
@@ -84,17 +84,16 @@ class TestBackfillCache:
         mock_api.download_clip.return_value = b"downloaded_data"
 
         mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
-        mock_email_cls.return_value.send_backfill_summary.return_value = None
 
         # Pre-populate the cache directory with the expected file
-        cache_dir = tmp_path / "output" / "backfill"
+        cache_dir = tmp_path / "output" / "detections"
         cache_dir.mkdir(parents=True)
         local_time = event.start_time.astimezone()
         filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
         (cache_dir / filename).write_bytes(b"cached_data")
 
         monitor = Monitor(mock_settings)
-        monitor.backfill(debug_dump=True)
+        monitor.run()
 
         # download_clip should NOT have been called since the file was cached
         mock_api.download_clip.assert_not_called()
@@ -123,10 +122,9 @@ class TestBackfillCache:
         mock_api.download_clip.return_value = b"fresh_download"
 
         mock_detector_cls.return_value.detect_detailed.return_value = (None, {})
-        mock_email_cls.return_value.send_backfill_summary.return_value = None
 
         monitor = Monitor(mock_settings)
-        monitor.backfill(debug_dump=True)
+        monitor.run()
 
         # download_clip should have been called since no cached file exists
         mock_api.download_clip.assert_called_once_with(event)
@@ -134,6 +132,6 @@ class TestBackfillCache:
         # File should have been written to disk
         local_time = event.start_time.astimezone()
         filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-        cached_file = tmp_path / "output" / "backfill" / filename
+        cached_file = tmp_path / "output" / "detections" / filename
         assert cached_file.exists()
         assert cached_file.read_bytes() == b"fresh_download"

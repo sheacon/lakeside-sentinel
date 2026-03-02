@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from pathlib import Path
 
 import numpy as np
 
@@ -38,22 +37,28 @@ def _make_clip_report(
 
 
 class TestGenerateReport:
-    def test_creates_html_file(self, tmp_path: Path) -> None:
+    def test_returns_html_string(self) -> None:
         det = _make_detection("motorcycle", 0.5)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"motorcycle": det})]
-        path = generate_report(reports, tmp_path)
-        assert path == tmp_path / "report.html"
-        assert path.exists()
+        html = generate_report(reports)
+        assert isinstance(html, str)
+        assert "<!DOCTYPE html>" in html
 
-    def test_contains_video_tags(self, tmp_path: Path) -> None:
+    def test_contains_video_tags_by_default(self) -> None:
         det = _make_detection("motorcycle", 0.5)
         report = _make_clip_report(hour=14, best=det, class_detections={"motorcycle": det})
-        path = generate_report([report], tmp_path)
-        html = path.read_text()
+        html = generate_report([report])
         assert "<video" in html
         assert report.mp4_filename in html
 
-    def test_contains_base64_images_for_detections(self, tmp_path: Path) -> None:
+    def test_no_video_tags_when_include_video_false(self) -> None:
+        det = _make_detection("motorcycle", 0.5)
+        report = _make_clip_report(hour=14, best=det, class_detections={"motorcycle": det})
+        html = generate_report([report], include_video=False)
+        assert "<video" not in html
+        assert report.mp4_filename in html  # filename still in heading
+
+    def test_contains_base64_images_for_detections(self) -> None:
         car_det = _make_detection("Car", 0.85)
         bike_det = _make_detection("Bicycle", 0.30)
         report = _make_clip_report(
@@ -61,57 +66,51 @@ class TestGenerateReport:
             best=car_det,
             class_detections={"Car": car_det, "Bicycle": bike_det},
         )
-        path = generate_report([report], tmp_path)
-        html = path.read_text()
+        html = generate_report([report])
         assert "data:image/png;base64," in html
         assert "Car" in html
         assert "Bicycle" in html
 
-    def test_clips_below_threshold_are_excluded(self, tmp_path: Path) -> None:
+    def test_clips_below_threshold_are_excluded(self) -> None:
         low_det = _make_detection("motorcycle", 0.005)
         report = _make_clip_report(hour=8, best=None, class_detections={"motorcycle": low_det})
-        path = generate_report([report], tmp_path)
-        html = path.read_text()
+        html = generate_report([report])
         assert "<video" not in html
         assert "1 clips analysed" in html
         assert "0 with detections" in html
 
-    def test_clips_with_no_detections_are_excluded(self, tmp_path: Path) -> None:
+    def test_clips_with_no_detections_are_excluded(self) -> None:
         report = _make_clip_report(hour=8, best=None, class_detections={})
-        path = generate_report([report], tmp_path)
-        html = path.read_text()
+        html = generate_report([report])
         assert "<video" not in html
 
-    def test_empty_clip_list(self, tmp_path: Path) -> None:
-        path = generate_report([], tmp_path)
-        html = path.read_text()
+    def test_empty_clip_list(self) -> None:
+        html = generate_report([])
         assert "0 clips analysed" in html
         assert "0 with detections" in html
 
-    def test_confidence_formatted_as_percentage(self, tmp_path: Path) -> None:
+    def test_confidence_formatted_as_percentage(self) -> None:
         det = _make_detection("Truck", 0.731)
         report = _make_clip_report(
             hour=15,
             best=det,
             class_detections={"Truck": det},
         )
-        path = generate_report([report], tmp_path)
-        html = path.read_text()
+        html = generate_report([report])
         assert "73%" in html
 
-    def test_summary_stats_correct(self, tmp_path: Path) -> None:
+    def test_summary_stats_correct(self) -> None:
         det = _make_detection("Car", 0.9)
         reports = [
             _make_clip_report(hour=10, best=det, class_detections={"Car": det}),
             _make_clip_report(hour=11, best=None),
             _make_clip_report(hour=12, best=det, class_detections={"Car": det}),
         ]
-        path = generate_report(reports, tmp_path)
-        html = path.read_text()
+        html = generate_report(reports)
         assert "3 clips analysed" in html
         assert "2 with detections" in html
 
-    def test_sorted_by_motorcycle_confidence(self, tmp_path: Path) -> None:
+    def test_sorted_by_motorcycle_confidence(self) -> None:
         low = _make_detection("Motorcycle", 0.3)
         high = _make_detection("Motorcycle", 0.9)
         mid = _make_detection("Motorcycle", 0.6)
@@ -120,29 +119,27 @@ class TestGenerateReport:
             _make_clip_report(hour=11, best=high, class_detections={"Motorcycle": high}),
             _make_clip_report(hour=12, best=mid, class_detections={"Motorcycle": mid}),
         ]
-        path = generate_report(reports, tmp_path)
-        html = path.read_text()
+        html = generate_report(reports)
         # 90% should appear before 60% which should appear before 30%
         pos_90 = html.index("90%")
         pos_60 = html.index("60%")
         pos_30 = html.index("30%")
         assert pos_90 < pos_60 < pos_30
 
-    def test_non_motorcycle_clips_sorted_after_motorcycle(self, tmp_path: Path) -> None:
+    def test_non_motorcycle_clips_sorted_after_motorcycle(self) -> None:
         moto = _make_detection("Motorcycle", 0.4)
         bike = _make_detection("Bicycle", 0.9)
         reports = [
             _make_clip_report(hour=10, best=bike, class_detections={"Bicycle": bike}),
             _make_clip_report(hour=11, best=moto, class_detections={"Motorcycle": moto}),
         ]
-        path = generate_report(reports, tmp_path)
-        html = path.read_text()
+        html = generate_report(reports)
         # Motorcycle clip (hour=11) should appear before bicycle-only clip (hour=10)
         pos_moto = html.index("Motorcycle")
         pos_bike = html.index("Bicycle")
         assert pos_moto < pos_bike
 
-    def test_secondary_sort_by_bicycle(self, tmp_path: Path) -> None:
+    def test_secondary_sort_by_bicycle(self) -> None:
         """When motorcycle confidence is equal, sort by bicycle confidence."""
         bike_high = _make_detection("Bicycle", 0.8)
         bike_low = _make_detection("Bicycle", 0.3)
@@ -150,9 +147,12 @@ class TestGenerateReport:
             _make_clip_report(hour=10, best=bike_low, class_detections={"Bicycle": bike_low}),
             _make_clip_report(hour=11, best=bike_high, class_detections={"Bicycle": bike_high}),
         ]
-        path = generate_report(reports, tmp_path)
-        html = path.read_text()
+        html = generate_report(reports)
         # 80% should appear before 30%
         pos_80 = html.index("80%")
         pos_30 = html.index("30%")
         assert pos_80 < pos_30
+
+    def test_report_title_is_daily_detection(self) -> None:
+        html = generate_report([])
+        assert "Daily Detection Report" in html
