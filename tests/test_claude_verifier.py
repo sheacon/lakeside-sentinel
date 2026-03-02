@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from lakeside_sentinel.detection.claude_verifier import ClaudeVerifier
+from lakeside_sentinel.detection.claude_verifier import DEFAULT_PROMPT, ClaudeVerifier
 from lakeside_sentinel.detection.models import Detection
 
 
@@ -188,6 +188,33 @@ class TestVerifyDetections:
 
         assert result == {}
         mock_anthropic_cls.return_value.messages.create.assert_not_called()
+
+    @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
+    def test_custom_prompt_sent_to_api(self, mock_anthropic_cls: MagicMock) -> None:
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value = _mock_response("yes")
+
+        custom_prompt = "Is there a bicycle in this image? Answer yes or no."
+        verifier = ClaudeVerifier(api_key="test-key", prompt=custom_prompt)
+        det = _make_detection()
+        verifier.verify_detection(det)
+
+        call_kwargs = mock_client.messages.create.call_args[1]
+        text_block = call_kwargs["messages"][0]["content"][1]
+        assert text_block["text"] == custom_prompt
+
+    @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
+    def test_default_prompt_used_when_not_specified(self, mock_anthropic_cls: MagicMock) -> None:
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value = _mock_response("yes")
+
+        verifier = ClaudeVerifier(api_key="test-key")
+        det = _make_detection()
+        verifier.verify_detection(det)
+
+        call_kwargs = mock_client.messages.create.call_args[1]
+        text_block = call_kwargs["messages"][0]["content"][1]
+        assert text_block["text"] == DEFAULT_PROMPT
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_encode_frame_returns_base64_string(self, mock_anthropic_cls: MagicMock) -> None:

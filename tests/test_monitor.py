@@ -8,7 +8,7 @@ import pytest
 from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.config import Settings
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.main import Monitor, _print_settings
+from lakeside_sentinel.main import Monitor, _print_settings, _TeeWriter
 
 
 def _make_event(hour: int = 12) -> CameraEvent:
@@ -962,3 +962,267 @@ class TestMergeClipReports:
         # Since HSP has a different filename, VEH report is returned as-is
         assert "Motorcycle" in merged[0].class_detections
         assert "HSP" not in merged[0].class_detections
+
+
+class TestStepLabels:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
+    def test_present_mode_step_labels(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+        mock_verifier_cls.return_value.verify_detections.return_value = {}
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        output = capsys.readouterr().out
+        assert "[1/5]" in output
+        assert "[2/5]" in output
+        assert "[3/5]" in output
+        assert "[4/5]" in output
+        assert "[5/5]" in output
+        assert "[3.5/4]" not in output
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
+    def test_debug_veh_without_claude_has_4_steps(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+
+        monitor = Monitor(mock_settings)
+        monitor.run_debug_veh()
+
+        output = capsys.readouterr().out
+        assert "[1/4]" in output
+        assert "[2/4]" in output
+        assert "[3/4]" in output
+        assert "[4/4]" in output
+        assert "[3.5/4]" not in output
+
+
+class TestTimestampsAndDuration:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
+    def test_done_in_appears_in_output(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+
+        monitor = Monitor(mock_settings)
+        monitor.run_debug_veh()
+
+        output = capsys.readouterr().out
+        assert "Done in" in output
+
+
+class TestLogFile:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
+    def test_log_file_created_for_debug_veh(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+
+        monitor = Monitor(mock_settings)
+        monitor.run_debug_veh(target_date=datetime(2026, 2, 28).date())
+
+        log_path = tmp_path / "output" / "report-veh-2026-02-28.log"
+        assert log_path.exists()
+        content = log_path.read_text()
+        assert "[1/4]" in content
+        assert "Done in" in content
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
+    def test_log_file_created_for_present(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+        mock_verifier_cls.return_value.verify_detections.return_value = {}
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        log_path = tmp_path / "output" / "report-2026-02-28.log"
+        assert log_path.exists()
+        content = log_path.read_text()
+        assert "[1/5]" in content
+
+    def test_tee_writer_writes_to_both(self, tmp_path: Path) -> None:
+        log_path = tmp_path / "test.log"
+        tee = _TeeWriter(log_path)
+        import io
+
+        fake_stdout = io.StringIO()
+        tee._stdout = fake_stdout
+        tee.write("hello world")
+        tee.flush()
+        tee.close()
+
+        assert fake_stdout.getvalue() == "hello world"
+        assert log_path.read_text() == "hello world"

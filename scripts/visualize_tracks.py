@@ -161,8 +161,16 @@ def write_annotated_video(
         return
 
     h, w = frames[0].shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    fourcc = cv2.VideoWriter_fourcc(*"avc1")
     writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
+    if not writer.isOpened():
+        logger.warning(
+            "H.264 (avc1) codec unavailable; falling back to mp4v. "
+            "Re-encode with: ffmpeg -i %s -c:v libx264 output.mp4",
+            output_path,
+        )
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(str(output_path), fourcc, fps, (w, h))
 
     for frame_idx, frame in enumerate(frames):
         annotated = annotate_frame_progressive(frame, tracks, frame_idx, threshold, fps)

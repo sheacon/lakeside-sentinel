@@ -17,6 +17,7 @@ from visualize_tracks import (
     build_parser,
     print_track_table,
     summarize_tracks,
+    write_annotated_video,
 )
 
 from lakeside_sentinel.detection.hsp_detector import PersonTrack, TrackPoint
@@ -49,6 +50,23 @@ def _make_track_point(
 def _make_track(points: list[TrackPoint]) -> PersonTrack:
     """Create a PersonTrack from a list of TrackPoints."""
     return PersonTrack(points=points)
+
+
+# --- TestWriteAnnotatedVideo ---
+
+
+class TestWriteAnnotatedVideo:
+    def test_creates_video_file(self, tmp_path: Path) -> None:
+        frames = [_make_frame(100, 200) for _ in range(5)]
+        output_path = tmp_path / "test_output.mp4"
+        write_annotated_video(frames, [], threshold=240.0, fps=4, output_path=output_path)
+        assert output_path.exists()
+        assert output_path.stat().st_size > 0
+
+    def test_empty_frames_no_file(self, tmp_path: Path) -> None:
+        output_path = tmp_path / "empty.mp4"
+        write_annotated_video([], [], threshold=240.0, fps=4, output_path=output_path)
+        assert not output_path.exists()
 
 
 # --- TestBuildParser ---

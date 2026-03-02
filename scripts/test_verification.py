@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 
-from lakeside_sentinel.detection.claude_verifier import _PROMPT
+from lakeside_sentinel.detection.claude_verifier import DEFAULT_PROMPT
 from lakeside_sentinel.detection.models import Detection
 from lakeside_sentinel.detection.veh_detector import VEHDetector
 from lakeside_sentinel.utils.image import crop_to_bbox, crop_to_roi
@@ -120,7 +120,7 @@ def main() -> None:
         logger.error("Clip not found: %s", clip_path)
         raise SystemExit(1)
 
-    prompt = args.prompt or _PROMPT
+    prompt = args.prompt or DEFAULT_PROMPT
 
     # Extract and crop frames
     logger.info("Extracting frames from %s at %d FPS", clip_path, args.fps)

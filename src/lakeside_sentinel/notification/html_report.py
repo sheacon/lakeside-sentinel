@@ -75,7 +75,7 @@ def _encode_cropped_png(
 
 
 def _render_settings_html(settings: dict[str, object]) -> str:
-    """Render settings as an HTML details/summary block, masking sensitive values."""
+    """Render settings as an HTML block, masking sensitive values."""
     rows: list[str] = []
     for name, value in settings.items():
         if any(kw in name for kw in _SENSITIVE_KEYWORDS):
@@ -88,11 +88,9 @@ def _render_settings_html(settings: dict[str, object]) -> str:
             f"<td style='padding:2px 0'><code>{display}</code></td></tr>"
         )
     return (
-        '<details style="margin-bottom:20px;color:#64748b;font-size:0.85em">'
-        "<summary style='cursor:pointer;font-weight:600'>Parameters</summary>"
-        '<table style="margin-top:8px;border-collapse:collapse">'
-        + "".join(rows)
-        + "</table></details>"
+        '<div style="margin-bottom:20px;color:#64748b;font-size:0.85em">'
+        '<h3 style="margin:0 0 8px;font-size:1em;font-weight:600">Parameters</h3>'
+        '<table style="border-collapse:collapse">' + "".join(rows) + "</table></div>"
     )
 
 

@@ -369,6 +369,13 @@ class TestSettingsInReport:
         assert "****" in html
         assert "yolo_models/yolo26s.pt" in html
 
+    def test_no_collapsible_wrapper(self) -> None:
+        settings = {"yolo_model": "yolo_models/yolo26s.pt"}
+        html, _ = generate_report([], mode="veh", settings=settings)
+        assert "<details" not in html
+        assert "<summary" not in html
+        assert "Parameters" in html
+
     def test_no_settings_block_when_none(self) -> None:
         html, _ = generate_report([], mode="veh")
         assert "Parameters" not in html

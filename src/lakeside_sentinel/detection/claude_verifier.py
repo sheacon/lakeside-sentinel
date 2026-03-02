@@ -15,7 +15,7 @@ from lakeside_sentinel.utils.image import crop_to_bbox
 
 logger = logging.getLogger(__name__)
 
-_PROMPT = (
+DEFAULT_PROMPT = (
     "Is there a motorized two-wheeled vehicle in this image — such as a motorcycle, motorbike, "
     "scooter, moped, or e-bike? People may be riding or standing near it. "
     "Do NOT count baby strollers, prams, pushchairs, wagons, wheelchairs, "
@@ -35,10 +35,12 @@ class ClaudeVerifier:
         model: str = "claude-sonnet-4-20250514",
         crop_padding: float = 0.2,
         timeout: float = 30.0,
+        prompt: str = DEFAULT_PROMPT,
     ) -> None:
         self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout)
         self._model = model
         self._crop_padding = crop_padding
+        self._prompt = prompt
 
     def _encode_frame(
         self,
@@ -77,7 +79,7 @@ class ClaudeVerifier:
                             },
                             {
                                 "type": "text",
-                                "text": _PROMPT,
+                                "text": self._prompt,
                             },
                         ],
                     }

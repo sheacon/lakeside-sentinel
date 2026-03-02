@@ -42,3 +42,12 @@ class Settings(BaseSettings):
     # Claude Vision verification (optional)
     anthropic_api_key: str = ""
     claude_vision_model: str = "claude-sonnet-4-20250514"
+    claude_vision_prompt: str = (
+        "Is there a motorized two-wheeled vehicle in this image — such as a motorcycle, "
+        "motorbike, scooter, moped, or e-bike? People may be riding or standing near it. "
+        "Do NOT count baby strollers, prams, pushchairs, wagons, wheelchairs, "
+        "shopping carts, or any non-motorized wheeled object. "
+        'Answer "yes" or "no" only. '
+        'Answer "yes" only if a motorized two-wheeled vehicle is clearly visible. '
+        'Answer "no" for everything else.'
+    )

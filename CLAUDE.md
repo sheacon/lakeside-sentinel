@@ -168,6 +168,7 @@ See `.env.example` for the full list. Key variables:
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 800.0, px/sec) - HSP tracking (thresholds are FPS-invariant)
 - `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for present mode and `--debug --claude`)
 - `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
+- `CLAUDE_VISION_PROMPT` - Custom prompt for Claude Vision verification (defaults to built-in motorized vehicle prompt)
 
 ## Conventions
 
