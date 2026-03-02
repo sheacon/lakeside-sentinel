@@ -40,7 +40,12 @@ cp .env.example .env  # then fill in credentials
 
 ### Present mode (default)
 
-Runs both VEH + HSP detection with Claude verification. Produces a clean report suitable for sharing (hides confidence scores, class names, and debug info). Requires `ANTHROPIC_API_KEY`.
+Runs both VEH + HSP detection with Claude verification. Produces a clean report suitable for sharing (hides confidence scores, class names, and debug info), plus VEH and HSP debug reports with unfiltered detection data. Requires `ANTHROPIC_API_KEY`.
+
+Output files:
+- `output/report-{date}.html` — clean present report (opened in browser, emailed if `--email`)
+- `output/report-veh-{date}.html` — VEH debug report with all class detections (not opened/emailed)
+- `output/report-hsp-{date}.html` — HSP debug report with fastest track regardless of threshold (not opened/emailed)
 
 ```bash
 python -m lakeside_sentinel                    # most recent daylight period
