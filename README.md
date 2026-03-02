@@ -17,7 +17,7 @@ src/lakeside_motorbikes/
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
-│   ├── scooter_detector.py # Experimental: person tracking + centroid displacement
+│   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), batched inference
 ├── notification/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
@@ -43,7 +43,7 @@ python -m lakeside_motorbikes              # live monitoring (polls every 120s)
 python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
 python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
 python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
-python -m lakeside_motorbikes --scooter --backfill --debug-dump  # experimental scooter detection
+python -m lakeside_motorbikes --hsp --backfill --debug-dump  # experimental HSP detection
 ```
 
 Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
@@ -88,8 +88,8 @@ See `.env.example` for the full list. Key variables:
 | `ROI_X_START` | `0.0` | Horizontal region of interest start (fraction 0.0–1.0) |
 | `ROI_X_END` | `1.0` | Horizontal region of interest end (fraction 0.0–1.0) |
 | `FPS_SAMPLE` | `2` | Frames extracted per second of video |
-| `SCOOTER_FPS_SAMPLE` | `4` | Frames per second for scooter mode (higher = better tracking) |
-| `SCOOTER_DISPLACEMENT_THRESHOLD` | `40.0` | Min centroid displacement (px/interval) to flag as scooter |
-| `SCOOTER_PERSON_CONFIDENCE` | `0.4` | Min YOLO person confidence for tracking |
-| `SCOOTER_MAX_MATCH_DISTANCE` | `200.0` | Max centroid distance (px) for track matching |
+| `HSP_FPS_SAMPLE` | `4` | Frames per second for HSP mode (higher = better tracking) |
+| `HSP_DISPLACEMENT_THRESHOLD` | `60.0` | Min centroid displacement (px/interval) to flag as HSP |
+| `HSP_PERSON_CONFIDENCE` | `0.4` | Min YOLO person confidence for tracking |
+| `HSP_MAX_MATCH_DISTANCE` | `200.0` | Max centroid distance (px) for track matching |
 | `POLL_INTERVAL_SECONDS` | `120` | Seconds between event polls |

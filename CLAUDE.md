@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_motorbikes/
 ├── main.py                # Monitor orchestration & polling logic
-├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump, --scooter)
+├── cli.py                 # CLI argument parser (--backfill, --date, --debug-dump, --hsp)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -15,7 +15,7 @@ src/lakeside_motorbikes/
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
-│   ├── scooter_detector.py # Experimental: person tracking + centroid displacement
+│   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   └── email_sender.py    # Resend email: single alerts + backfill summary
@@ -41,7 +41,7 @@ python -m lakeside_motorbikes              # live monitoring (polls every 120s)
 python -m lakeside_motorbikes --backfill   # analyze most recent daylight period
 python -m lakeside_motorbikes --backfill --debug-dump  # save clips as MP4s (cached)
 python -m lakeside_motorbikes --date 2026-02-28  # backfill a specific date's daylight
-python -m lakeside_motorbikes --scooter --backfill --debug-dump  # experimental scooter detection
+python -m lakeside_motorbikes --hsp --backfill --debug-dump  # experimental HSP detection
 ```
 
 Deployed as a macOS LaunchAgent via `com.lakeside-motorbikes.worker.plist`.
@@ -74,8 +74,8 @@ See `.env.example` for the full list. Key variables:
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
 - `FPS_SAMPLE` (default 2) - frames extracted per second of video
-- `SCOOTER_FPS_SAMPLE` (default 4), `SCOOTER_DISPLACEMENT_THRESHOLD` (default 40.0) - scooter mode
-- `SCOOTER_PERSON_CONFIDENCE` (default 0.4), `SCOOTER_MAX_MATCH_DISTANCE` (default 200.0) - scooter tracking
+- `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
+- `HSP_PERSON_CONFIDENCE` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
 - `POLL_INTERVAL_SECONDS` (default 120)
 
 ## Conventions

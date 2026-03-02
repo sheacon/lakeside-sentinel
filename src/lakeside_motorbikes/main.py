@@ -13,8 +13,8 @@ from lakeside_motorbikes.camera.models import CameraEvent
 from lakeside_motorbikes.camera.nest_api import NestCameraAPI
 from lakeside_motorbikes.cli import parse_args
 from lakeside_motorbikes.config import Settings
+from lakeside_motorbikes.detection.hsp_detector import HSPDetector
 from lakeside_motorbikes.detection.models import Detection
-from lakeside_motorbikes.detection.scooter_detector import ScooterDetector
 from lakeside_motorbikes.detection.vehicle_detector import VehicleDetector
 from lakeside_motorbikes.notification.email_sender import EmailSender
 from lakeside_motorbikes.notification.html_report import ClipReport, generate_report
@@ -381,15 +381,15 @@ class Monitor:
             print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'=' * 60}\n")
 
-    def backfill_scooter(self, debug_dump: bool = False, backfill_date: date | None = None) -> None:
-        """Backfill with experimental scooter detection (person tracking)."""
+    def backfill_hsp(self, debug_dump: bool = False, backfill_date: date | None = None) -> None:
+        """Backfill with experimental high-speed person (HSP) detection."""
         if backfill_date is not None:
             start, end = get_daylight_span_for_date(
                 backfill_date,
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = f"SCOOTER BACKFILL (experimental) — {backfill_date.isoformat()}"
+            label = f"HSP BACKFILL (experimental) — {backfill_date.isoformat()}"
         else:
             now = datetime.now(timezone.utc)
             start, end = get_daylight_span(
@@ -397,7 +397,7 @@ class Monitor:
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = "SCOOTER BACKFILL (experimental) — Most recent daylight"
+            label = "HSP BACKFILL (experimental) — Most recent daylight"
         now = end
 
         print(f"\n{'=' * 60}")
@@ -408,11 +408,11 @@ class Monitor:
         _print_settings(self._settings)
         print(f"{'=' * 60}\n")
 
-        scooter_detector = ScooterDetector(
+        hsp_detector = HSPDetector(
             model_name=self._settings.yolo_model,
-            person_confidence=self._settings.scooter_person_confidence,
-            displacement_threshold=self._settings.scooter_displacement_threshold,
-            max_match_distance=self._settings.scooter_max_match_distance,
+            person_confidence=self._settings.hsp_person_confidence,
+            displacement_threshold=self._settings.hsp_displacement_threshold,
+            max_match_distance=self._settings.hsp_max_match_distance,
             batch_size=self._settings.yolo_batch_size,
         )
 
@@ -434,7 +434,7 @@ class Monitor:
 
         dump_dir: Path | None = None
         if debug_dump:
-            dump_dir = Path("output") / "backfill-scooter"
+            dump_dir = Path("output") / "backfill-hsp"
             dump_dir.mkdir(parents=True, exist_ok=True)
             print(f"[dump] Saving clips to: {dump_dir.resolve()}\n")
 
@@ -494,8 +494,8 @@ class Monitor:
             print(f"       {download_errors} download errors")
         print()
 
-        fps = self._settings.scooter_fps_sample
-        print(f"[3/4] Analyzing frames for scooter motion (fps={fps})...")
+        fps = self._settings.hsp_fps_sample
+        print(f"[3/4] Analyzing frames for high-speed persons (fps={fps})...")
         detection_count = 0
         total_frames = 0
         collected_detections: list[tuple[np.ndarray, float, str, datetime]] = []
@@ -528,8 +528,8 @@ class Monitor:
                     )
                 continue
 
-            tracks = scooter_detector.detect_all_tracks(frames)
-            detection = scooter_detector.detect(frames)
+            tracks = hsp_detector.detect_all_tracks(frames)
+            detection = hsp_detector.detect(frames)
 
             if debug_dump:
                 # Log all track displacements for threshold tuning
@@ -544,10 +544,10 @@ class Monitor:
                     )
 
                 mp4_fn = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-                # Build class_detections with the scooter detection if present
+                # Build class_detections with the HSP detection if present
                 class_dets: dict[str, Detection] = {}
                 if detection:
-                    class_dets["Scooter"] = detection
+                    class_dets["HSP"] = detection
                 clip_reports.append(
                     ClipReport(
                         event_time=event.start_time,
@@ -566,7 +566,7 @@ class Monitor:
             if detection is None:
                 print(
                     f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames"
-                    f" — no scooter{track_info}",
+                    f" — no HSP{track_info}",
                     flush=True,
                 )
                 continue
@@ -574,7 +574,7 @@ class Monitor:
             detection_count += 1
             print(
                 f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
-                f"SCOOTER (confidence: {detection.confidence:.0%}){track_info}",
+                f"HSP (confidence: {detection.confidence:.0%}){track_info}",
                 flush=True,
             )
 
@@ -609,7 +609,7 @@ class Monitor:
                 print("       No detections — no email sent")
 
         print(f"\n{'=' * 60}")
-        print("  SCOOTER BACKFILL COMPLETE")
+        print("  HSP BACKFILL COMPLETE")
         print(f"  Events:     {len(events)}")
         print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
         print(f"  Frames:     {total_frames} analyzed (fps={fps})")
@@ -651,8 +651,8 @@ def main() -> None:
 
     monitor = Monitor(settings)
 
-    if args.scooter and args.backfill:
-        monitor.backfill_scooter(debug_dump=args.debug_dump, backfill_date=backfill_date)
+    if args.hsp and args.backfill:
+        monitor.backfill_hsp(debug_dump=args.debug_dump, backfill_date=backfill_date)
     elif args.backfill:
         monitor.backfill(debug_dump=args.debug_dump, backfill_date=backfill_date)
     else:

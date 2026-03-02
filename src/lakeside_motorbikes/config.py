@@ -33,11 +33,11 @@ class Settings(BaseSettings):
     # Frame sampling
     fps_sample: int = 2
 
-    # Scooter detection (experimental)
-    scooter_fps_sample: int = 4
-    scooter_displacement_threshold: float = 40.0
-    scooter_person_confidence: float = 0.4
-    scooter_max_match_distance: float = 200.0
+    # High-speed person detection (experimental)
+    hsp_fps_sample: int = 4
+    hsp_displacement_threshold: float = 60.0
+    hsp_person_confidence: float = 0.4
+    hsp_max_match_distance: float = 200.0
 
     # Polling
     poll_interval_seconds: int = 120

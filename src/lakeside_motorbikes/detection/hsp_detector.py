@@ -1,4 +1,4 @@
-"""Experimental scooter detection via person tracking and centroid displacement."""
+"""High-speed person (HSP) detection via person tracking and centroid displacement."""
 
 from __future__ import annotations
 
@@ -58,14 +58,14 @@ class PersonTrack:
         return max(self.points, key=lambda p: p.confidence)
 
 
-class ScooterDetector:
-    """Detects fast-moving people (scooter riders) via centroid tracking."""
+class HSPDetector:
+    """Detects high-speed persons (HSP) via centroid tracking."""
 
     def __init__(
         self,
         model_name: str = "yolo26s.pt",
         person_confidence: float = 0.4,
-        displacement_threshold: float = 40.0,
+        displacement_threshold: float = 60.0,
         max_match_distance: float = 200.0,
         batch_size: int = 16,
     ) -> None:
@@ -75,7 +75,7 @@ class ScooterDetector:
         self._max_match_distance = max_match_distance
         self._batch_size = batch_size
         self._device = "mps" if torch.backends.mps.is_available() else "cpu"
-        logger.info("ScooterDetector YOLO device: %s", self._device)
+        logger.info("HSPDetector YOLO device: %s", self._device)
 
     def _empty_mps_cache(self) -> None:
         """Release unused MPS GPU memory back to the OS (no-op on CPU)."""
@@ -218,7 +218,7 @@ class ScooterDetector:
             frames: List of BGR frames.
 
         Returns:
-            Detection with class_name="Scooter" for the fastest track, or None.
+            Detection with class_name="HSP" for the fastest track, or None.
         """
         tracks = self._build_tracks(frames)
 
@@ -237,7 +237,7 @@ class ScooterDetector:
         best = fastest.best_point
 
         logger.info(
-            "Scooter detected: displacement=%.1f px/interval, confidence=%.2f",
+            "HSP detected: displacement=%.1f px/interval, confidence=%.2f",
             fastest.displacement_per_interval,
             best.confidence,
         )
@@ -246,5 +246,5 @@ class ScooterDetector:
             frame=best.frame,
             bbox=best.bbox,
             confidence=best.confidence,
-            class_name="Scooter",
+            class_name="HSP",
         )

@@ -3,9 +3,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from lakeside_motorbikes.detection.scooter_detector import (
+from lakeside_motorbikes.detection.hsp_detector import (
+    HSPDetector,
     PersonTrack,
-    ScooterDetector,
     TrackPoint,
 )
 
@@ -83,7 +83,7 @@ class TestPersonTrack:
 
 
 class TestTrackBuilding:
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_single_person_across_frames_one_track(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -102,14 +102,14 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4, max_match_distance=200.0)
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=200.0)
         frames = [dummy_frame] * 3
         tracks = detector.detect_all_tracks(frames)
 
         assert len(tracks) == 1
         assert len(tracks[0].points) == 3
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_two_people_tracked_independently(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -125,12 +125,12 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4, max_match_distance=200.0)
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=200.0)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 2
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_person_disappears_track_finalized(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -150,13 +150,13 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 1
         assert len(tracks[0].points) == 1
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_centroids_too_far_separate_tracks(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -178,13 +178,13 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4, max_match_distance=100.0)
+        detector = HSPDetector(person_confidence=0.4, max_match_distance=100.0)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 2
         assert all(len(t.points) == 1 for t in tracks)
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_empty_frames_no_tracks(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -196,24 +196,24 @@ class TestTrackBuilding:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4)
         tracks = detector.detect_all_tracks([dummy_frame, dummy_frame])
 
         assert len(tracks) == 0
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_no_frames_returns_empty(self, mock_yolo_cls: MagicMock) -> None:
-        detector = ScooterDetector()
+        detector = HSPDetector()
         assert detector.detect_all_tracks([]) == []
 
 
-class TestScooterDetector:
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+class TestHSPDetector:
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_no_frames_returns_none(self, mock_yolo_cls: MagicMock) -> None:
-        detector = ScooterDetector()
+        detector = HSPDetector()
         assert detector.detect([]) is None
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_no_persons_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -224,17 +224,17 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4)
+        detector = HSPDetector(person_confidence=0.4)
         assert detector.detect([dummy_frame, dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_slow_person_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
         """Person moving slowly (below threshold) should not be flagged."""
         mock_model = mock_yolo_cls.return_value
 
-        # Person moves 5px per frame (well below 40.0 threshold)
+        # Person moves 5px per frame (well below 60.0 threshold)
         boxes = [
             [_make_mock_box(cls=0, conf=0.8, xyxy=[95, 60, 105, 140])],
             [_make_mock_box(cls=0, conf=0.8, xyxy=[100, 60, 110, 140])],
@@ -246,19 +246,19 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(
-            person_confidence=0.4, displacement_threshold=40.0, max_match_distance=200.0
+        detector = HSPDetector(
+            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
         )
         assert detector.detect([dummy_frame] * 3) is None
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
-    def test_fast_person_detected_as_scooter(
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
+    def test_fast_person_detected_as_hsp(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
-        """Person moving fast should be flagged as Scooter."""
+        """Person moving fast should be flagged as HSP."""
         mock_model = mock_yolo_cls.return_value
 
-        # Person moves 60px per frame (above 40.0 threshold)
+        # Person moves 60px per frame (above 60.0 threshold)
         boxes = [
             [_make_mock_box(cls=0, conf=0.75, xyxy=[80, 60, 120, 140])],
             [_make_mock_box(cls=0, conf=0.85, xyxy=[140, 60, 180, 140])],
@@ -270,16 +270,16 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(
-            person_confidence=0.4, displacement_threshold=40.0, max_match_distance=200.0
+        detector = HSPDetector(
+            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
         )
         detection = detector.detect([dummy_frame] * 3)
 
         assert detection is not None
-        assert detection.class_name == "Scooter"
+        assert detection.class_name == "HSP"
         assert detection.confidence == 0.85  # best confidence in track
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_multiple_people_only_fast_one_flagged(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -307,17 +307,17 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(
-            person_confidence=0.4, displacement_threshold=40.0, max_match_distance=200.0
+        detector = HSPDetector(
+            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
         )
         detection = detector.detect([dummy_frame] * 3)
 
         assert detection is not None
-        assert detection.class_name == "Scooter"
+        assert detection.class_name == "HSP"
         # The fast person's bbox should be around x=400-560 range
         assert detection.bbox[0] >= 400
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_single_frame_person_returns_none(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -331,13 +331,13 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(
-            person_confidence=0.4, displacement_threshold=40.0, max_match_distance=200.0
+        detector = HSPDetector(
+            person_confidence=0.4, displacement_threshold=60.0, max_match_distance=200.0
         )
         # Only one frame → track has 1 point → can't compute displacement
         assert detector.detect([dummy_frame]) is None
 
-    @patch("lakeside_motorbikes.detection.scooter_detector.YOLO")
+    @patch("lakeside_motorbikes.detection.hsp_detector.YOLO")
     def test_low_confidence_person_filtered(
         self, mock_yolo_cls: MagicMock, dummy_frame: np.ndarray
     ) -> None:
@@ -355,5 +355,5 @@ class TestScooterDetector:
 
         mock_model.side_effect = side_effect
 
-        detector = ScooterDetector(person_confidence=0.4, displacement_threshold=40.0)
+        detector = HSPDetector(person_confidence=0.4, displacement_threshold=60.0)
         assert detector.detect([dummy_frame, dummy_frame]) is None
