@@ -108,6 +108,16 @@ Persistent=true
 WantedBy=timers.target
 ```
 
+## Verification Diagnostics
+
+Test Claude Vision verification against a video clip to measure consistency and debug rejections:
+
+```bash
+python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
+python scripts/test_verification.py --clip output/video/clip.mp4 --runs 5 --save-crops
+python scripts/test_verification.py --clip output/video/clip.mp4 --temperature 1.0
+```
+
 ## Testing
 
 ```bash

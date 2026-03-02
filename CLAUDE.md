@@ -77,6 +77,23 @@ python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
 
 Annotated images are saved to `output/tune/{clip_stem}/`. Results are printed as a table to stdout.
 
+## Verification Diagnostics
+
+`scripts/test_verification.py` tests Claude Vision verification against a video clip. Runs YOLO detection, then sends each crop to Claude N times to measure consistency. Uses `temperature=0` by default (matching production).
+
+```bash
+# Default: 3 runs at temperature=0
+python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
+
+# 5 runs, save crop images
+python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --runs 5 --save-crops
+
+# Compare with stochastic temperature
+python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --temperature 1.0
+```
+
+Crop images are saved to `output/verification/{clip_stem}/` when `--save-crops` is used.
+
 ## Testing
 
 ```bash
@@ -108,7 +125,7 @@ See `.env.example` for the full list. Key variables:
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
 - `ANTHROPIC_API_KEY` - API key for Claude Vision verification (optional, required for `--claude`)
-- `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification
+- `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification)
 
 ## Conventions
 

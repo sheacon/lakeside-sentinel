@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -88,6 +89,7 @@ class TestVerifyDetection:
         call_kwargs = mock_client.messages.create.call_args[1]
         assert call_kwargs["model"] == "claude-sonnet-4-20250514"
         assert call_kwargs["max_tokens"] == 16
+        assert call_kwargs["temperature"] == 0
 
         content = call_kwargs["messages"][0]["content"]
         image_block = content[0]
@@ -99,6 +101,21 @@ class TestVerifyDetection:
 
         decoded = base64.b64decode(image_block["source"]["data"])
         assert len(decoded) > 0
+
+    @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
+    def test_logs_raw_response(
+        self, mock_anthropic_cls: MagicMock, caplog: logging.LogCaptureFixture
+    ) -> None:
+        mock_client = mock_anthropic_cls.return_value
+        mock_client.messages.create.return_value = _mock_response("yes")
+
+        verifier = ClaudeVerifier(api_key="test-key")
+        det = _make_detection("Motorcycle", 0.85)
+
+        with caplog.at_level(logging.INFO, logger="lakeside_sentinel.detection.claude_verifier"):
+            verifier.verify_detection(det)
+
+        assert any("Motorcycle" in r.message and "'yes'" in r.message for r in caplog.records)
 
 
 class TestVerifyDetections:

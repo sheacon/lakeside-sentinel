@@ -59,6 +59,7 @@ class ClaudeVerifier:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=16,
+                temperature=0,
                 messages=[
                     {
                         "role": "user",
@@ -80,6 +81,12 @@ class ClaudeVerifier:
                 ],
             )
             answer = response.content[0].text.strip().lower()
+            logger.info(
+                "Claude response for %s (%.0f%%): %r",
+                detection.class_name,
+                detection.confidence * 100,
+                answer,
+            )
             if answer.startswith("yes"):
                 detection.verification_status = "confirmed"
                 return "confirmed"
