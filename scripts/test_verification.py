@@ -10,6 +10,7 @@ from pathlib import Path
 import anthropic
 import cv2
 import numpy as np
+from dotenv import load_dotenv
 
 from lakeside_sentinel.detection.claude_verifier import _PROMPT
 from lakeside_sentinel.detection.models import Detection
@@ -107,6 +108,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = build_parser()
     args = parser.parse_args()
 
