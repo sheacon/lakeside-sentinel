@@ -2,10 +2,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.config import Settings
+from lakeside_sentinel.detection.models import Detection
 from lakeside_sentinel.main import Monitor, _print_settings
 
 
@@ -135,3 +137,68 @@ class TestRunCache:
         cached_file = tmp_path / "output" / "video" / filename
         assert cached_file.exists()
         assert cached_file.read_bytes() == b"fresh_download"
+
+
+class TestThresholdFiltering:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_sub_threshold_detections_excluded_from_clip_report(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_detector_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        sub_threshold = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.15,
+            class_name="Bicycle",
+        )
+        above_threshold = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        mock_detector_cls.return_value.detect_detailed.return_value = (
+            above_threshold,
+            {"Bicycle": sub_threshold, "Motorcycle": above_threshold},
+        )
+
+        monitor = Monitor(mock_settings)
+        monitor.run()
+
+        # generate_report is called once (no email), check the first call
+        clip_reports = mock_generate_report.call_args_list[0][0][0]
+        assert len(clip_reports) == 1
+        report = clip_reports[0]
+
+        # Sub-threshold Bicycle (0.15 < 0.4 default) should be filtered out
+        assert "Bicycle" not in report.class_detections
+        # Above-threshold Motorcycle should remain
+        assert "Motorcycle" in report.class_detections

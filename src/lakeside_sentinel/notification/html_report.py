@@ -53,13 +53,8 @@ def generate_report(
     Returns:
         The generated HTML string.
     """
-    # Filter out clips where no class meets the minimum threshold
-    min_threshold = 0.01
-    filtered_reports = [
-        r
-        for r in clip_reports
-        if any(d.confidence >= min_threshold for d in r.class_detections.values())
-    ]
+    # Filter out clips with no above-threshold detections
+    filtered_reports = [r for r in clip_reports if r.class_detections]
 
     # Sort by motorcycle confidence (highest first), then bicycle confidence
     def _sort_key(r: ClipReport) -> tuple[float, float]:

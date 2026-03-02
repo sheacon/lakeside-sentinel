@@ -71,18 +71,12 @@ class TestGenerateReport:
         assert "Car" in html
         assert "Bicycle" in html
 
-    def test_clips_below_threshold_are_excluded(self) -> None:
-        low_det = _make_detection("motorcycle", 0.005)
-        report = _make_clip_report(hour=8, best=None, class_detections={"motorcycle": low_det})
-        html = generate_report([report])
-        assert "<video" not in html
-        assert "1 clips analysed" in html
-        assert "0 with detections" in html
-
     def test_clips_with_no_detections_are_excluded(self) -> None:
         report = _make_clip_report(hour=8, best=None, class_detections={})
         html = generate_report([report])
         assert "<video" not in html
+        assert "1 clips analysed" in html
+        assert "0 with detections" in html
 
     def test_empty_clip_list(self) -> None:
         html = generate_report([])

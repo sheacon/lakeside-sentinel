@@ -220,13 +220,20 @@ class Monitor:
 
             detection, class_best = self._detector.detect_detailed(frames)
 
+            # Filter to only above-threshold detections for the report
+            class_above = {
+                name: det
+                for name, det in class_best.items()
+                if det.confidence >= self._settings.vehicle_confidence_threshold
+            }
+
             mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
             clip_reports.append(
                 ClipReport(
                     event_time=event.start_time,
                     mp4_filename=mp4_fn,
                     best_detection=detection,
-                    class_detections=class_best,
+                    class_detections=class_above,
                 )
             )
 
