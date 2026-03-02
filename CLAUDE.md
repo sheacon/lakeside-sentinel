@@ -94,10 +94,30 @@ python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 
 
 Crop images are saved to `output/verification/{clip_stem}/` when `--save-crops` is used.
 
+## Track Visualization
+
+`scripts/visualize_tracks.py` renders HSP person tracks as an annotated video and a static summary image. Fast tracks (above threshold) are red, slow tracks are green. All CLI params default to `.env.example` values so no `.env` is required.
+
+```bash
+# Default settings
+python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
+
+# Multiple clips with overrides
+python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
+
+# With ROI and confidence override
+python scripts/visualize_tracks.py --clip clip.mp4 \
+    --person-confidence 0.3 --roi-y-start 0.0 --roi-y-end 0.28
+```
+
+Output directory: `output/tracks/{clip_stem}/`
+- `{clip_stem}_tracks.mp4` — annotated video with progressive track visualization
+- `{clip_stem}_summary.jpg` — static summary image with all tracks
+
 ## Testing
 
 ```bash
-pytest tests/                    # tests across 10 modules
+pytest tests/                    # tests across 11 modules
 pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 

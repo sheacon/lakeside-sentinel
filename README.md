@@ -108,6 +108,18 @@ Persistent=true
 WantedBy=timers.target
 ```
 
+## Track Visualization
+
+Render HSP person tracks as an annotated video and static summary image. Fast tracks (above threshold) are red, slow tracks are green:
+
+```bash
+python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
+python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
+python scripts/visualize_tracks.py --clip clip.mp4 --person-confidence 0.3
+```
+
+Output saved to `output/tracks/{clip_stem}/` (`_tracks.mp4` video + `_summary.jpg` image).
+
 ## Verification Diagnostics
 
 Test Claude Vision verification against a video clip to measure consistency and debug rejections:
