@@ -108,7 +108,7 @@ Crop images are saved to `output/verification/{clip_stem}/` when `--save-crops` 
 
 ## Track Visualization
 
-`scripts/visualize_tracks.py` renders HSP person tracks as an annotated video and a static summary image. Fast tracks (above threshold) are red, slow tracks are green. All CLI params default to `.env.example` values so no `.env` is required.
+`scripts/visualize_tracks.py` renders HSP person tracks as an annotated video and a static summary image. Fast tracks (above threshold) are red, slow tracks are green. All CLI params default to `.env.example` values so no `.env` is required. Multi-value flags create a Cartesian product sweep with output per combo.
 
 ```bash
 # Default settings
@@ -117,12 +117,17 @@ python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
 # Multiple clips with overrides
 python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
 
+# Multi-value sweep (2x3 = 6 runs per clip)
+python scripts/visualize_tracks.py --clip clip.mp4 \
+    --max-match-distance 400.0 800.0 \
+    --displacement 120.0 240.0 320.0
+
 # With ROI and confidence override
 python scripts/visualize_tracks.py --clip clip.mp4 \
     --person-confidence 0.3 --roi-y-start 0.0 --roi-y-end 0.28
 ```
 
-Output directory: `output/tracks/{clip_stem}/`
+Output directory: `output/tracks/{clip_stem}/` (single run) or `output/tracks/{clip_stem}/{param_label}/` (sweep)
 - `{clip_stem}_tracks.mp4` — annotated video with progressive track visualization
 - `{clip_stem}_summary.jpg` — static summary image with all tracks
 

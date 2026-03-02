@@ -97,14 +97,35 @@ class TestBuildParser:
             ]
         )
         assert args.model == "yolo26m.pt"
-        assert args.fps == 8
-        assert args.displacement == 320.0
-        assert args.person_confidence == 0.3
-        assert args.max_match_distance == 600.0
+        assert args.fps == [8]
+        assert args.displacement == [320.0]
+        assert args.person_confidence == [0.3]
+        assert args.max_match_distance == [600.0]
         assert args.roi_y_start == 0.1
         assert args.roi_y_end == 0.5
         assert args.roi_x_start == 0.2
         assert args.roi_x_end == 0.8
+
+    def test_multi_value_sweep(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(
+            [
+                "--clip",
+                "test.mp4",
+                "--fps",
+                "4",
+                "8",
+                "--displacement",
+                "120.0",
+                "240.0",
+                "--max-match-distance",
+                "400.0",
+                "800.0",
+            ]
+        )
+        assert args.fps == [4, 8]
+        assert args.displacement == [120.0, 240.0]
+        assert args.max_match_distance == [400.0, 800.0]
 
     def test_defaults_are_none(self) -> None:
         parser = build_parser()

@@ -124,15 +124,16 @@ WantedBy=timers.target
 
 ## Track Visualization
 
-Render HSP person tracks as an annotated video and static summary image. Fast tracks (above threshold) are red, slow tracks are green:
+Render HSP person tracks as an annotated video and static summary image. Fast tracks (above threshold) are red, slow tracks are green. Multi-value flags create a Cartesian product sweep:
 
 ```bash
 python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
 python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
 python scripts/visualize_tracks.py --clip clip.mp4 --person-confidence 0.3
+python scripts/visualize_tracks.py --clip clip.mp4 --max-match-distance 400.0 800.0
 ```
 
-Output saved to `output/tracks/{clip_stem}/` (`_tracks.mp4` video + `_summary.jpg` image).
+Output saved to `output/tracks/{clip_stem}/` (single run) or `output/tracks/{clip_stem}/{param_label}/` (sweep).
 
 ## Verification Diagnostics
 

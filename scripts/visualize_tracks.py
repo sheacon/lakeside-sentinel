@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -268,6 +269,7 @@ def process_clip(
     roi_y_end: float,
     roi_x_start: float,
     roi_x_end: float,
+    output_dir: Path | None = None,
 ) -> list[TrackSummary]:
     """Process a single clip: extract frames, detect tracks, write outputs.
 
@@ -282,12 +284,14 @@ def process_clip(
         roi_y_end: ROI vertical end (0.0-1.0).
         roi_x_start: ROI horizontal start (0.0-1.0).
         roi_x_end: ROI horizontal end (0.0-1.0).
+        output_dir: Directory for output files. Defaults to output/tracks/{clip_stem}/.
 
     Returns:
         List of TrackSummary for the clip.
     """
     clip_stem = clip_path.stem
-    output_dir = Path("output/tracks") / clip_stem
+    if output_dir is None:
+        output_dir = Path("output/tracks") / clip_stem
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Processing clip: %s", clip_path)
@@ -346,15 +350,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--clip", type=Path, nargs="+", required=True, help="One or more MP4 paths")
     parser.add_argument("--model", type=str, default=None, help="YOLO model weights file")
-    parser.add_argument("--fps", type=int, default=None, help="Frames per second for extraction")
     parser.add_argument(
-        "--displacement", type=float, default=None, help="Displacement threshold (px/sec)"
+        "--fps", type=int, nargs="+", default=None, help="Frames per second (multi-value sweep)"
     )
     parser.add_argument(
-        "--person-confidence", type=float, default=None, help="Min YOLO person confidence"
+        "--displacement",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Displacement threshold px/sec (multi-value sweep)",
     )
     parser.add_argument(
-        "--max-match-distance", type=float, default=None, help="Max centroid distance (px/sec)"
+        "--person-confidence",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Min YOLO person confidence (multi-value sweep)",
+    )
+    parser.add_argument(
+        "--max-match-distance",
+        type=float,
+        nargs="+",
+        default=None,
+        help="Max centroid distance px/sec (multi-value sweep)",
     )
     parser.add_argument(
         "--roi-y-start", type=float, default=None, help="ROI vertical start (0.0-1.0)"
@@ -374,39 +392,69 @@ def main() -> None:
     args = parser.parse_args()
 
     model = args.model or DEFAULT_MODEL
-    fps = args.fps or DEFAULT_FPS
-    displacement = args.displacement if args.displacement is not None else DEFAULT_DISPLACEMENT
-    person_confidence = (
-        args.person_confidence if args.person_confidence is not None else DEFAULT_PERSON_CONFIDENCE
+    fps_values = args.fps or [DEFAULT_FPS]
+    displacement_values = (
+        args.displacement if args.displacement is not None else [DEFAULT_DISPLACEMENT]
     )
-    max_match_distance = (
+    person_confidence_values = (
+        args.person_confidence
+        if args.person_confidence is not None
+        else [DEFAULT_PERSON_CONFIDENCE]
+    )
+    max_match_distance_values = (
         args.max_match_distance
         if args.max_match_distance is not None
-        else DEFAULT_MAX_MATCH_DISTANCE
+        else [DEFAULT_MAX_MATCH_DISTANCE]
     )
     roi_y_start = args.roi_y_start if args.roi_y_start is not None else 0.0
     roi_y_end = args.roi_y_end if args.roi_y_end is not None else 1.0
     roi_x_start = args.roi_x_start if args.roi_x_start is not None else 0.0
     roi_x_end = args.roi_x_end if args.roi_x_end is not None else 1.0
 
+    combos = list(
+        itertools.product(
+            fps_values,
+            displacement_values,
+            person_confidence_values,
+            max_match_distance_values,
+        )
+    )
+    is_sweep = len(combos) > 1
+
     for clip_path in args.clip:
         if not clip_path.exists():
             logger.error("Clip not found: %s", clip_path)
             continue
 
-        summaries = process_clip(
-            clip_path=clip_path,
-            model=model,
-            fps=fps,
-            displacement=displacement,
-            person_confidence=person_confidence,
-            max_match_distance=max_match_distance,
-            roi_y_start=roi_y_start,
-            roi_y_end=roi_y_end,
-            roi_x_start=roi_x_start,
-            roi_x_end=roi_x_end,
-        )
-        print_track_table(summaries)
+        clip_stem = clip_path.stem
+
+        for run_id, (fps, displacement, person_confidence, max_match_distance) in enumerate(
+            combos, start=1
+        ):
+            if is_sweep:
+                run_label = (
+                    f"fps{fps}_disp{displacement:.0f}"
+                    f"_conf{person_confidence:.2f}_match{max_match_distance:.0f}"
+                )
+                output_dir = Path("output/tracks") / clip_stem / run_label
+                print(f"\n[{run_id}/{len(combos)}] {run_label}")
+            else:
+                output_dir = Path("output/tracks") / clip_stem
+
+            summaries = process_clip(
+                clip_path=clip_path,
+                model=model,
+                fps=fps,
+                displacement=displacement,
+                person_confidence=person_confidence,
+                max_match_distance=max_match_distance,
+                roi_y_start=roi_y_start,
+                roi_y_end=roi_y_end,
+                roi_x_start=roi_x_start,
+                roi_x_end=roi_x_end,
+                output_dir=output_dir,
+            )
+            print_track_table(summaries)
 
 
 if __name__ == "__main__":
