@@ -447,9 +447,20 @@ class TestPresentMode:
         # Claude verification should have been called
         mock_verifier_cls.return_value.verify_detections.assert_called()
 
-        # generate_report should use mode="present"
+        # generate_report called 3 times: present + veh debug + hsp debug
+        assert mock_generate_report.call_count == 3
+
+        # First call is the present report
         call_kwargs = mock_generate_report.call_args_list[0][1]
         assert call_kwargs["mode"] == "present"
+
+        # Second call is the VEH debug report
+        call_kwargs = mock_generate_report.call_args_list[1][1]
+        assert call_kwargs["mode"] == "veh"
+
+        # Third call is the HSP debug report
+        call_kwargs = mock_generate_report.call_args_list[2][1]
+        assert call_kwargs["mode"] == "hsp"
 
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.ClaudeVerifier")
@@ -500,6 +511,12 @@ class TestPresentMode:
         # Report filename should be report-{date}.html (no mode prefix)
         report_path = tmp_path / "output" / "report-2026-02-28.html"
         assert report_path.exists()
+
+        # Debug reports should also exist
+        veh_debug_path = tmp_path / "output" / "report-veh-2026-02-28.html"
+        hsp_debug_path = tmp_path / "output" / "report-hsp-2026-02-28.html"
+        assert veh_debug_path.exists()
+        assert hsp_debug_path.exists()
 
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.ClaudeVerifier")
@@ -571,12 +588,296 @@ class TestPresentMode:
         monitor = Monitor(mock_settings)
         monitor.run_present()
 
-        # The merged report should contain both Motorcycle and HSP detections
+        # generate_report called 3 times: present + veh debug + hsp debug
+        assert mock_generate_report.call_count == 3
+
+        # The merged present report should contain both Motorcycle and HSP detections
         clip_reports = mock_generate_report.call_args_list[0][0][0]
         assert len(clip_reports) == 1
         report = clip_reports[0]
         assert "Motorcycle" in report.class_detections
         assert "HSP" in report.class_detections
+
+
+class TestPresentModeDebugReports:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_veh_debug_report_includes_below_threshold_detections(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        sub_threshold = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.15,
+            class_name="Bicycle",
+        )
+        above_threshold = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        mock_veh_cls.return_value.detect_detailed.return_value = (
+            above_threshold,
+            {"Bicycle": sub_threshold, "Motorcycle": above_threshold},
+        )
+
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+
+        def mock_verify(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for det in detections.values():
+                det.verification_status = "confirmed"
+            return detections
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        # Call 0 = present, call 1 = VEH debug, call 2 = HSP debug
+        assert mock_generate_report.call_count == 3
+
+        # Present report should NOT have below-threshold Bicycle
+        present_reports = mock_generate_report.call_args_list[0][0][0]
+        assert "Bicycle" not in present_reports[0].class_detections
+
+        # VEH debug report should include below-threshold Bicycle
+        veh_debug_reports = mock_generate_report.call_args_list[1][0][0]
+        assert len(veh_debug_reports) == 1
+        assert "Bicycle" in veh_debug_reports[0].class_detections
+        assert "Motorcycle" in veh_debug_reports[0].class_detections
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_hsp_debug_report_includes_below_threshold_tracks(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+
+        # HSP: below-threshold track (detect returns None, but detect_all_tracks
+        # returns a track). We mock a PersonTrack with displacement below threshold.
+        from lakeside_sentinel.detection.hsp_detector import PersonTrack, TrackPoint
+
+        slow_track = PersonTrack(
+            points=[
+                TrackPoint(
+                    frame_index=0,
+                    centroid_x=100.0,
+                    centroid_y=100.0,
+                    bbox=(80.0, 80.0, 120.0, 120.0),
+                    confidence=0.75,
+                    frame=dummy_frame,
+                ),
+                TrackPoint(
+                    frame_index=1,
+                    centroid_x=110.0,
+                    centroid_y=100.0,
+                    bbox=(90.0, 80.0, 130.0, 120.0),
+                    confidence=0.80,
+                    frame=dummy_frame,
+                ),
+            ]
+        )
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = [slow_track]
+        mock_hsp_cls.return_value.detect.return_value = None  # below threshold
+
+        def mock_verify(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for det in detections.values():
+                det.verification_status = "confirmed"
+            return detections
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        # Call 0 = present, call 1 = VEH debug, call 2 = HSP debug
+        assert mock_generate_report.call_count == 3
+
+        # Present report should NOT have HSP (below threshold)
+        present_reports = mock_generate_report.call_args_list[0][0][0]
+        assert "HSP" not in present_reports[0].class_detections
+
+        # HSP debug report should include the below-threshold track
+        hsp_debug_reports = mock_generate_report.call_args_list[2][0][0]
+        assert len(hsp_debug_reports) == 1
+        assert "HSP" in hsp_debug_reports[0].class_detections
+        assert hsp_debug_reports[0].best_detection is not None
+        assert hsp_debug_reports[0].best_detection.speed is not None
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_debug_reports_not_emailed(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+
+        mock_verifier_cls.return_value.verify_detections.return_value = {}
+        mock_email_cls.return_value.send_report.return_value = "email-id-123"
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(send_email=True, target_date=datetime(2026, 2, 28).date())
+
+        # Email should only be sent once (for the present report, not debug reports)
+        mock_email_cls.return_value.send_report.assert_called_once()
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.HSPDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_debug_reports_not_opened_in_browser(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_veh_cls: MagicMock,
+        mock_hsp_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
+        mock_hsp_cls.return_value.detect.return_value = None
+
+        mock_verifier_cls.return_value.verify_detections.return_value = {}
+
+        monitor = Monitor(mock_settings)
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+
+        # Browser should only be opened once (for the present report)
+        mock_webbrowser_open.assert_called_once()
+
+        # The opened URL should be the present report, not a debug report
+        opened_url = mock_webbrowser_open.call_args[0][0]
+        assert "report-2026-02-28.html" in opened_url
+        assert "report-veh-" not in opened_url
+        assert "report-hsp-" not in opened_url
 
 
 class TestMergeClipReports:

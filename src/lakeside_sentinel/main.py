@@ -218,15 +218,17 @@ class Monitor:
         self,
         clips: list[tuple[int, bytes]],
         events: list[CameraEvent],
-    ) -> tuple[list[ClipReport], int, int]:
+    ) -> tuple[list[ClipReport], int, int, list[ClipReport]]:
         """Step 3 VEH: YOLO detection.
 
-        Returns (clip_reports, detection_count, total_frames).
+        Returns (clip_reports, detection_count, total_frames, debug_clip_reports).
+        debug_clip_reports contains all classes (no threshold filter).
         """
         print("[3/4] Analyzing frames with YOLO...")
         detection_count = 0
         total_frames = 0
         clip_reports: list[ClipReport] = []
+        debug_clip_reports: list[ClipReport] = []
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
@@ -244,14 +246,14 @@ class Monitor:
             if not frames:
                 print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
                 mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-                clip_reports.append(
-                    ClipReport(
-                        event_time=event.start_time,
-                        mp4_filename=mp4_fn,
-                        best_detection=None,
-                        class_detections={},
-                    )
+                empty_report = ClipReport(
+                    event_time=event.start_time,
+                    mp4_filename=mp4_fn,
+                    best_detection=None,
+                    class_detections={},
                 )
+                clip_reports.append(empty_report)
+                debug_clip_reports.append(empty_report)
                 continue
 
             detection, class_best = self._veh_detector.detect_detailed(frames)
@@ -270,6 +272,14 @@ class Monitor:
                     mp4_filename=mp4_fn,
                     best_detection=detection,
                     class_detections=class_above,
+                )
+            )
+            debug_clip_reports.append(
+                ClipReport(
+                    event_time=event.start_time,
+                    mp4_filename=mp4_fn,
+                    best_detection=detection,
+                    class_detections=dict(class_best),
                 )
             )
 
@@ -297,22 +307,24 @@ class Monitor:
             )
             print(f"            {breakdown}")
 
-        return clip_reports, detection_count, total_frames
+        return clip_reports, detection_count, total_frames, debug_clip_reports
 
     def _detect_hsp(
         self,
         clips: list[tuple[int, bytes]],
         events: list[CameraEvent],
-    ) -> tuple[list[ClipReport], int, int]:
+    ) -> tuple[list[ClipReport], int, int, list[ClipReport]]:
         """Step 3 HSP: Person tracking.
 
-        Returns (clip_reports, detection_count, total_frames).
+        Returns (clip_reports, detection_count, total_frames, debug_clip_reports).
+        debug_clip_reports contains the fastest track regardless of threshold.
         """
         fps = self._settings.hsp_fps_sample
         print(f"[3/4] Analyzing frames for high-speed persons (fps={fps})...")
         detection_count = 0
         total_frames = 0
         clip_reports: list[ClipReport] = []
+        debug_clip_reports: list[ClipReport] = []
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
@@ -330,14 +342,14 @@ class Monitor:
             if not frames:
                 print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
                 mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
-                clip_reports.append(
-                    ClipReport(
-                        event_time=event.start_time,
-                        mp4_filename=mp4_fn,
-                        best_detection=None,
-                        class_detections={},
-                    )
+                empty_report = ClipReport(
+                    event_time=event.start_time,
+                    mp4_filename=mp4_fn,
+                    best_detection=None,
+                    class_detections={},
                 )
+                clip_reports.append(empty_report)
+                debug_clip_reports.append(empty_report)
                 continue
 
             tracks = self._hsp_detector.detect_all_tracks(frames)
@@ -368,6 +380,31 @@ class Monitor:
                 )
             )
 
+            # Build debug report with fastest track (regardless of threshold)
+            debug_class_dets: dict[str, Detection] = {}
+            debug_best: Detection | None = None
+            multi_point_tracks = [t for t in tracks if len(t.points) >= 2]
+            if multi_point_tracks:
+                fastest = max(multi_point_tracks, key=lambda t: t.displacement_per_second(fps))
+                best_pt = fastest.best_point
+                debug_det = Detection(
+                    frame=best_pt.frame,
+                    bbox=best_pt.bbox,
+                    confidence=best_pt.confidence,
+                    class_name="HSP",
+                    speed=fastest.displacement_per_second(fps),
+                )
+                debug_class_dets["HSP"] = debug_det
+                debug_best = debug_det
+            debug_clip_reports.append(
+                ClipReport(
+                    event_time=event.start_time,
+                    mp4_filename=mp4_fn,
+                    best_detection=debug_best,
+                    class_detections=debug_class_dets,
+                )
+            )
+
             track_info = ""
             if tracks:
                 displacements = [t.displacement_per_second(fps) for t in tracks]
@@ -389,7 +426,7 @@ class Monitor:
                 flush=True,
             )
 
-        return clip_reports, detection_count, total_frames
+        return clip_reports, detection_count, total_frames, debug_clip_reports
 
     def _verify_with_claude(
         self,
@@ -492,6 +529,29 @@ class Monitor:
 
         return report_path, email_id
 
+    def _write_debug_report(
+        self,
+        clip_reports: list[ClipReport],
+        date_str: str,
+        mode: str,
+        title: str,
+    ) -> Path:
+        """Generate an HTML debug report and write to disk (no browser, no email)."""
+        settings_dict = self._settings.model_dump()
+        html = generate_report(
+            clip_reports,
+            crop_padding=self._settings.crop_padding,
+            include_video=True,
+            title=title,
+            mode=mode,
+            settings=settings_dict,
+        )
+        report_path = Path("output") / f"report-{mode}-{date_str}.html"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(html)
+        logger.info("Debug %s report written to %s", mode.upper(), report_path)
+        return report_path
+
     @staticmethod
     def _merge_clip_reports(
         veh_reports: list[ClipReport],
@@ -550,8 +610,8 @@ class Monitor:
 
         clips, total_mb = self._download_clips(events)
 
-        veh_reports, veh_count, veh_frames = self._detect_veh(clips, events)
-        hsp_reports, hsp_count, hsp_frames = self._detect_hsp(clips, events)
+        veh_reports, veh_count, veh_frames, veh_debug_reports = self._detect_veh(clips, events)
+        hsp_reports, hsp_count, hsp_frames, hsp_debug_reports = self._detect_hsp(clips, events)
 
         merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
 
@@ -567,6 +627,13 @@ class Monitor:
             subtitle=date_str,
         )
 
+        veh_debug_path = self._write_debug_report(
+            veh_debug_reports, date_str, "veh", "VEH Detection Report"
+        )
+        hsp_debug_path = self._write_debug_report(
+            hsp_debug_reports, date_str, "hsp", "HSP Detection Report"
+        )
+
         print(f"\n{'=' * 60}")
         print("  DETECTION COMPLETE")
         print(f"  Events:     {len(events)}")
@@ -574,6 +641,8 @@ class Monitor:
         print(f"  Frames:     {veh_frames} VEH + {hsp_frames} HSP analyzed")
         print(f"  Detections: {detection_count}")
         print(f"  Report:     {report_path.resolve()}")
+        print(f"  VEH debug:  {veh_debug_path.resolve()}")
+        print(f"  HSP debug:  {hsp_debug_path.resolve()}")
         if send_email:
             print(f"  Email:      {'sent' if email_id else 'failed'}")
         dump_dir = Path("output") / "video"
@@ -601,7 +670,7 @@ class Monitor:
             date_str = start.astimezone().strftime("%Y-%m-%d")
 
         clips, total_mb = self._download_clips(events)
-        clip_reports, detection_count, total_frames = self._detect_veh(clips, events)
+        clip_reports, detection_count, total_frames, _ = self._detect_veh(clips, events)
 
         if use_claude:
             clip_reports, detection_count = self._verify_with_claude(
@@ -646,7 +715,7 @@ class Monitor:
             date_str = start.astimezone().strftime("%Y-%m-%d")
 
         clips, total_mb = self._download_clips(events)
-        clip_reports, detection_count, total_frames = self._detect_hsp(clips, events)
+        clip_reports, detection_count, total_frames, _ = self._detect_hsp(clips, events)
 
         if use_claude:
             clip_reports, detection_count = self._verify_with_claude(
