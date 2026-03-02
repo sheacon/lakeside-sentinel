@@ -129,7 +129,7 @@ Output directory: `output/tracks/{clip_stem}/`
 ## Testing
 
 ```bash
-pytest tests/                    # tests across 11 modules
+pytest tests/                    # tests across 14 modules
 pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 

@@ -185,8 +185,8 @@ See `.env.example` for the full list. Key variables:
 | `ROI_X_END` | `1.0` | Horizontal region of interest end (fraction 0.0–1.0) |
 | `VEH_FPS_SAMPLE` | `2` | Frames extracted per second for VEH mode |
 | `HSP_FPS_SAMPLE` | `4` | Frames per second for HSP mode (higher = better tracking) |
-| `HSP_DISPLACEMENT_THRESHOLD` | `60.0` | Min centroid displacement (px/interval) to flag as HSP |
+| `HSP_DISPLACEMENT_THRESHOLD` | `240.0` | Min centroid displacement (px/sec) to flag as HSP |
 | `HSP_PERSON_CONFIDENCE_THRESHOLD` | `0.4` | Min YOLO person confidence for tracking |
-| `HSP_MAX_MATCH_DISTANCE` | `200.0` | Max centroid distance (px) for track matching |
-| `ANTHROPIC_API_KEY` | — | API key for Claude Vision verification (optional) |
+| `HSP_MAX_MATCH_DISTANCE` | `800.0` | Max centroid distance (px) for track matching |
+| `ANTHROPIC_API_KEY` | — | API key for Claude Vision verification (required for present mode) |
 | `CLAUDE_VISION_MODEL` | `claude-sonnet-4-20250514` | Claude model for verification |
