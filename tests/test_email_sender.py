@@ -50,6 +50,28 @@ class TestSendReport:
         assert result == "email_obj_456"
 
     @patch("lakeside_sentinel.notification.email_sender.resend")
+    def test_send_report_with_attachments(
+        self,
+        mock_resend: MagicMock,
+        sender: EmailSender,
+    ) -> None:
+        mock_resend.Emails.send.return_value = {"id": "email_456"}
+        attachments = [
+            {
+                "filename": "detection-0.jpg",
+                "content": "base64data",
+                "content_type": "image/jpeg",
+                "content_id": "detection-0",
+            }
+        ]
+
+        result = sender.send_report("<h1>Report</h1>", "Test Subject", attachments=attachments)
+
+        assert result == "email_456"
+        call_args = mock_resend.Emails.send.call_args[0][0]
+        assert call_args["attachments"] == attachments
+
+    @patch("lakeside_sentinel.notification.email_sender.resend")
     def test_send_report_handles_exception(
         self,
         mock_resend: MagicMock,

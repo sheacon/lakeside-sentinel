@@ -41,20 +41,34 @@ def _encode_cropped_png(
     padding: float,
     *,
     enhance: bool = False,
-) -> str:
-    """Crop a detection and return a base64-encoded PNG data URI.
+    for_email: bool = False,
+    cid_index: int = 0,
+) -> str | tuple[str, str, bytes]:
+    """Crop a detection and return image data for HTML embedding.
 
     Args:
         frame: The full video frame.
         bbox: Bounding box coordinates (x1, y1, x2, y2).
         padding: Padding fraction for cropping.
         enhance: When True, upscale 2x with cubic interpolation and sharpen.
+        for_email: When True, return CID reference and JPEG bytes for email attachment.
+        cid_index: Index used to generate unique CID identifiers.
+
+    Returns:
+        When for_email is False: a base64-encoded PNG data URI string.
+        When for_email is True: a tuple of (cid_src, cid_id, jpeg_bytes).
     """
     cropped = crop_to_bbox(frame, bbox, padding=padding)
     if enhance:
         h, w = cropped.shape[:2]
         cropped = cv2.resize(cropped, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
         cropped = _sharpen_image(cropped)
+
+    if for_email:
+        cid = f"detection-{cid_index}"
+        _, jpeg_buf = cv2.imencode(".jpg", cropped, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        return f"cid:{cid}", cid, jpeg_buf.tobytes()
+
     _, png_bytes = cv2.imencode(".png", cropped)
     b64 = base64.b64encode(png_bytes.tobytes()).decode()
     return f"data:image/png;base64,{b64}"
@@ -90,7 +104,8 @@ def generate_report(
     mode: str = "veh",
     settings: dict[str, object] | None = None,
     subtitle: str | None = None,
-) -> str:
+    for_email: bool = False,
+) -> tuple[str, list[dict[str, str | bytes]]]:
     """Generate a self-contained HTML report.
 
     Args:
@@ -101,9 +116,11 @@ def generate_report(
         mode: Detection mode ("veh", "hsp", or "present"). Controls sorting and display.
         settings: Optional settings dict to display in debug mode reports.
         subtitle: Optional subtitle shown below the title.
+        for_email: When True, use CID inline attachments (JPEG) instead of base64 data URIs.
 
     Returns:
-        The generated HTML string.
+        A tuple of (html_string, attachments) where attachments is a list of dicts
+        for Resend CID attachments. Empty list when for_email is False.
     """
     is_present = mode == "present"
 
@@ -139,6 +156,8 @@ def generate_report(
     detected_clips = len(filtered_reports)
 
     sections: list[str] = []
+    attachments: list[dict[str, str | bytes]] = []
+    cid_counter = 0
     for report in filtered_reports:
         local_time = report.event_time.astimezone()
         time_str = local_time.strftime("%H:%M:%S")
@@ -155,7 +174,32 @@ def generate_report(
                 key=lambda x: x[1].confidence,
                 reverse=True,
             ):
-                img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding, enhance=is_present)
+                if for_email:
+                    result = _encode_cropped_png(
+                        det.frame,
+                        det.bbox,
+                        crop_padding,
+                        enhance=is_present,
+                        for_email=True,
+                        cid_index=cid_counter,
+                    )
+                    assert isinstance(result, tuple)
+                    img_uri, cid_id, jpeg_bytes = result
+                    attachments.append(
+                        {
+                            "filename": f"{cid_id}.jpg",
+                            "content": base64.b64encode(jpeg_bytes).decode(),
+                            "content_type": "image/jpeg",
+                            "content_id": cid_id,
+                        }
+                    )
+                    cid_counter += 1
+                else:
+                    result = _encode_cropped_png(
+                        det.frame, det.bbox, crop_padding, enhance=is_present
+                    )
+                    assert isinstance(result, str)
+                    img_uri = result
 
                 if is_present:
                     # Present mode: generic label, no metrics, no Claude info
@@ -232,11 +276,18 @@ def generate_report(
                 f"</video>"
             )
 
+        if for_email:
+            heading_html = f'<h3 style="margin:0 0 8px">{time_str}</h3>'
+        else:
+            heading_html = (
+                f'<h3 style="margin:0 0 8px">{time_str} &mdash; '
+                f'<code style="font-size:0.85em">{report.mp4_filename}</code></h3>'
+            )
+
         sections.append(
             f'<div style="border-left:4px solid {border_color};background:{bg_color};'
             f'padding:12px 16px;margin-bottom:16px;border-radius:0 8px 8px 0">'
-            f'<h3 style="margin:0 0 8px">{time_str} &mdash; '
-            f'<code style="font-size:0.85em">{report.mp4_filename}</code></h3>'
+            f"{heading_html}"
             f'<p style="margin:4px 0">{best_str}</p>'
             f"{video_html}"
             f"{cards_html}"
@@ -270,4 +321,4 @@ def generate_report(
         + "</body></html>"
     )
 
-    return html
+    return html, attachments

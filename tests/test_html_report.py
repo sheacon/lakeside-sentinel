@@ -47,21 +47,21 @@ class TestGenerateReport:
     def test_returns_html_string(self) -> None:
         det = _make_detection("motorcycle", 0.5)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"motorcycle": det})]
-        html = generate_report(reports)
+        html, _ = generate_report(reports)
         assert isinstance(html, str)
         assert "<!DOCTYPE html>" in html
 
     def test_contains_video_tags_by_default(self) -> None:
         det = _make_detection("motorcycle", 0.5)
         report = _make_clip_report(hour=14, best=det, class_detections={"motorcycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "<video" in html
         assert report.mp4_filename in html
 
     def test_no_video_tags_when_include_video_false(self) -> None:
         det = _make_detection("motorcycle", 0.5)
         report = _make_clip_report(hour=14, best=det, class_detections={"motorcycle": det})
-        html = generate_report([report], include_video=False)
+        html, _ = generate_report([report], include_video=False)
         assert "<video" not in html
         assert report.mp4_filename in html  # filename still in heading
 
@@ -73,20 +73,20 @@ class TestGenerateReport:
             best=car_det,
             class_detections={"Car": car_det, "Bicycle": bike_det},
         )
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "data:image/png;base64," in html
         assert "Car" in html
         assert "Bicycle" in html
 
     def test_clips_with_no_detections_are_excluded(self) -> None:
         report = _make_clip_report(hour=8, best=None, class_detections={})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "<video" not in html
         assert "1 clips analysed" in html
         assert "0 with detections" in html
 
     def test_empty_clip_list(self) -> None:
-        html = generate_report([])
+        html, _ = generate_report([])
         assert "0 clips analysed" in html
         assert "0 with detections" in html
 
@@ -97,7 +97,7 @@ class TestGenerateReport:
             best=det,
             class_detections={"Truck": det},
         )
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "73%" in html
 
     def test_summary_stats_correct(self) -> None:
@@ -107,7 +107,7 @@ class TestGenerateReport:
             _make_clip_report(hour=11, best=None),
             _make_clip_report(hour=12, best=det, class_detections={"Car": det}),
         ]
-        html = generate_report(reports)
+        html, _ = generate_report(reports)
         assert "3 clips analysed" in html
         assert "2 with detections" in html
 
@@ -120,7 +120,7 @@ class TestGenerateReport:
             _make_clip_report(hour=11, best=high, class_detections={"Motorcycle": high}),
             _make_clip_report(hour=12, best=mid, class_detections={"Motorcycle": mid}),
         ]
-        html = generate_report(reports)
+        html, _ = generate_report(reports)
         # 90% should appear before 60% which should appear before 30%
         pos_90 = html.index("90%")
         pos_60 = html.index("60%")
@@ -134,7 +134,7 @@ class TestGenerateReport:
             _make_clip_report(hour=10, best=bike, class_detections={"Bicycle": bike}),
             _make_clip_report(hour=11, best=moto, class_detections={"Motorcycle": moto}),
         ]
-        html = generate_report(reports)
+        html, _ = generate_report(reports)
         # Motorcycle clip (hour=11) should appear before bicycle-only clip (hour=10)
         pos_moto = html.index("Motorcycle")
         pos_bike = html.index("Bicycle")
@@ -148,25 +148,25 @@ class TestGenerateReport:
             _make_clip_report(hour=10, best=bike_low, class_detections={"Bicycle": bike_low}),
             _make_clip_report(hour=11, best=bike_high, class_detections={"Bicycle": bike_high}),
         ]
-        html = generate_report(reports)
+        html, _ = generate_report(reports)
         # 80% should appear before 30%
         pos_80 = html.index("80%")
         pos_30 = html.index("30%")
         assert pos_80 < pos_30
 
     def test_report_default_title(self) -> None:
-        html = generate_report([])
+        html, _ = generate_report([])
         assert "Detection Report" in html
 
     def test_report_custom_title(self) -> None:
-        html = generate_report([], title="VEH Detection Report")
+        html, _ = generate_report([], title="VEH Detection Report")
         assert "VEH Detection Report" in html
 
     def test_verified_badge_shown_for_confirmed(self) -> None:
         det = _make_detection("Motorcycle", 0.9)
         det.verification_status = "confirmed"
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "Claude verified" in html
         assert "Claude rejected" not in html
 
@@ -174,14 +174,14 @@ class TestGenerateReport:
         det = _make_detection("Bicycle", 0.7)
         det.verification_status = "rejected"
         report = _make_clip_report(hour=10, best=det, class_detections={"Bicycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "Claude rejected" in html
         assert "Claude verified" not in html
 
     def test_no_badge_when_not_verified(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "Claude verified" not in html
         assert "Claude rejected" not in html
 
@@ -190,14 +190,14 @@ class TestGenerateReport:
         det.verification_status = "confirmed"
         det.verification_response = "yes"
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "Claude:" in html
         assert "&ldquo;yes&rdquo;" in html
 
     def test_verification_response_not_shown_when_none(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report])
+        html, _ = generate_report([report])
         assert "Claude:" not in html
 
     def test_hsp_sorted_by_speed(self) -> None:
@@ -209,7 +209,7 @@ class TestGenerateReport:
             _make_clip_report(hour=11, best=fast, class_detections={"HSP": fast}),
             _make_clip_report(hour=12, best=mid, class_detections={"HSP": mid}),
         ]
-        html = generate_report(reports, mode="hsp")
+        html, _ = generate_report(reports, mode="hsp")
         # 400 px/sec should appear before 280 before 160
         pos_400 = html.index("400 px/sec")
         pos_280 = html.index("280 px/sec")
@@ -219,20 +219,20 @@ class TestGenerateReport:
     def test_hsp_footer_says_sorted_by_speed(self) -> None:
         det = _make_detection("HSP", 0.5, speed=300.0)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"HSP": det})]
-        html = generate_report(reports, mode="hsp")
+        html, _ = generate_report(reports, mode="hsp")
         assert "sorted by speed" in html
         assert "sorted by motorcycle confidence" not in html
 
     def test_veh_footer_says_sorted_by_motorcycle_confidence(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
-        html = generate_report(reports, mode="veh")
+        html, _ = generate_report(reports, mode="veh")
         assert "sorted by motorcycle confidence" in html
 
     def test_hsp_card_shows_speed_instead_of_confidence(self) -> None:
         det = _make_detection("HSP", 0.5, speed=320.0)
         report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
-        html = generate_report([report], mode="hsp")
+        html, _ = generate_report([report], mode="hsp")
         assert "320 px/sec" in html
 
 
@@ -244,7 +244,7 @@ class TestPresentModeReport:
             _make_clip_report(hour=14, best=late, class_detections={"Motorcycle": late}),
             _make_clip_report(hour=10, best=early, class_detections={"Motorcycle": early}),
         ]
-        html = generate_report(reports, mode="present")
+        html, _ = generate_report(reports, mode="present")
         # Times display in local time; get the expected local time strings
         early_time = datetime(2026, 2, 28, 10, 0, 0, tzinfo=timezone.utc)
         late_time = datetime(2026, 2, 28, 14, 0, 0, tzinfo=timezone.utc)
@@ -257,7 +257,7 @@ class TestPresentModeReport:
     def test_sort_label_says_chronologically(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
-        html = generate_report(reports, mode="present")
+        html, _ = generate_report(reports, mode="present")
         assert "sorted chronologically" in html
         assert "sorted by motorcycle confidence" not in html
 
@@ -269,7 +269,7 @@ class TestPresentModeReport:
             best=moto,
             class_detections={"Motorcycle": moto, "HSP": hsp},
         )
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "Potential Motorized Vehicle" in html
         assert ">Motorcycle<" not in html
         assert ">HSP<" not in html
@@ -277,13 +277,13 @@ class TestPresentModeReport:
     def test_hides_confidence_percentages(self) -> None:
         det = _make_detection("Motorcycle", 0.85)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "85%" not in html
 
     def test_hides_speed_metrics(self) -> None:
         det = _make_detection("HSP", 0.5, speed=320.0)
         report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "px/sec" not in html
 
     def test_hides_claude_badges(self) -> None:
@@ -291,7 +291,7 @@ class TestPresentModeReport:
         det.verification_status = "confirmed"
         det.verification_response = "yes this is a motorcycle"
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "Claude verified" not in html
         assert "Claude rejected" not in html
         assert "Claude:" not in html
@@ -299,7 +299,7 @@ class TestPresentModeReport:
     def test_best_detection_shows_generic_label(self) -> None:
         det = _make_detection("Motorcycle", 0.9)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         # Best detection summary should show generic label, not class name
         assert "Potential Motorized Vehicle" in html
 
@@ -307,14 +307,14 @@ class TestPresentModeReport:
         det = _make_detection("Motorcycle", 0.5)
         # Create a report where best_detection is None but has class_detections
         report = _make_clip_report(hour=10, best=None, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "No detection" in html
         assert "No detection above threshold" not in html
 
     def test_shows_cropped_images(self) -> None:
         det = _make_detection("Motorcycle", 0.85)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "data:image/png;base64," in html
 
     def test_mixed_veh_and_hsp_in_one_clip(self) -> None:
@@ -325,7 +325,7 @@ class TestPresentModeReport:
             best=moto,
             class_detections={"Motorcycle": moto, "HSP": hsp},
         )
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         # Should have two cards, both labeled "Potential Motorized Vehicle"
         assert html.count("Potential Motorized Vehicle") >= 2
 
@@ -333,7 +333,7 @@ class TestPresentModeReport:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
         settings = {"yolo_model": "yolo_models/yolo26s.pt", "veh_confidence_threshold": 0.4}
-        html = generate_report([report], mode="present", settings=settings)
+        html, _ = generate_report([report], mode="present", settings=settings)
         assert "Parameters" not in html
         assert "Yolo Model" not in html
 
@@ -343,7 +343,7 @@ class TestSettingsInReport:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
         settings = {"yolo_model": "yolo_models/yolo26s.pt", "veh_confidence_threshold": 0.4}
-        html = generate_report([report], mode="veh", settings=settings)
+        html, _ = generate_report([report], mode="veh", settings=settings)
         assert "Parameters" in html
         assert "Yolo Model" in html
         assert "yolo_models/yolo26s.pt" in html
@@ -353,7 +353,7 @@ class TestSettingsInReport:
         det = _make_detection("HSP", 0.5, speed=300.0)
         report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
         settings = {"hsp_fps_sample": 4, "hsp_displacement_threshold": 240.0}
-        html = generate_report([report], mode="hsp", settings=settings)
+        html, _ = generate_report([report], mode="hsp", settings=settings)
         assert "Parameters" in html
         assert "Hsp Fps Sample" in html
 
@@ -363,31 +363,31 @@ class TestSettingsInReport:
             "resend_api_key": "re_live_abc",
             "yolo_model": "yolo_models/yolo26s.pt",
         }
-        html = generate_report([], mode="veh", settings=settings)
+        html, _ = generate_report([], mode="veh", settings=settings)
         assert "secret123" not in html
         assert "re_live_abc" not in html
         assert "****" in html
         assert "yolo_models/yolo26s.pt" in html
 
     def test_no_settings_block_when_none(self) -> None:
-        html = generate_report([], mode="veh")
+        html, _ = generate_report([], mode="veh")
         assert "Parameters" not in html
 
 
 class TestSubtitle:
     def test_subtitle_rendered(self) -> None:
-        html = generate_report([], title="Test Report", subtitle="2026-03-01")
+        html, _ = generate_report([], title="Test Report", subtitle="2026-03-01")
         assert "2026-03-01" in html
 
     def test_no_subtitle_when_none(self) -> None:
-        html = generate_report([], title="Test Report")
+        html, _ = generate_report([], title="Test Report")
         # No subtitle paragraph between h1 and stats
         assert html.index("</h1>") < html.index("clips analysed")
 
     def test_present_mode_title_and_subtitle(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report(
+        html, _ = generate_report(
             [report],
             mode="present",
             title="Motorized Vehicle Detection Report",
@@ -399,14 +399,14 @@ class TestSubtitle:
     def test_present_mode_card_dimensions(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="present")
         assert "width:320px" in html
         assert "max-width:288px" in html
 
     def test_debug_mode_card_dimensions(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html = generate_report([report], mode="veh")
+        html, _ = generate_report([report], mode="veh")
         assert "width:160px" in html
         assert "max-width:144px" in html
 
@@ -429,6 +429,7 @@ class TestEncodeCroppedPng:
         frame = np.zeros((100, 100, 3), dtype=np.uint8)
         bbox = (10.0, 10.0, 90.0, 90.0)
         uri = _encode_cropped_png(frame, bbox, 0.0)
+        assert isinstance(uri, str)
         assert uri.startswith("data:image/png;base64,")
 
     def test_enhanced_output_larger_than_normal(self) -> None:
@@ -437,4 +438,73 @@ class TestEncodeCroppedPng:
         normal = _encode_cropped_png(frame, bbox, 0.0)
         enhanced = _encode_cropped_png(frame, bbox, 0.0, enhance=True)
         # 2x upscaled image produces a larger base64 string
+        assert isinstance(normal, str)
+        assert isinstance(enhanced, str)
         assert len(enhanced) > len(normal)
+
+    def test_for_email_returns_cid_tuple(self) -> None:
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bbox = (10.0, 10.0, 90.0, 90.0)
+        result = _encode_cropped_png(frame, bbox, 0.0, for_email=True, cid_index=5)
+        assert isinstance(result, tuple)
+        cid_src, cid_id, jpeg_bytes = result
+        assert cid_src == "cid:detection-5"
+        assert cid_id == "detection-5"
+        assert isinstance(jpeg_bytes, bytes)
+        assert len(jpeg_bytes) > 0
+
+
+class TestEmailReport:
+    def test_for_email_returns_html_and_attachments(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html, attachments = generate_report([report], for_email=True)
+        assert isinstance(html, str)
+        assert "<!DOCTYPE html>" in html
+        assert len(attachments) == 1
+
+    def test_for_email_uses_jpeg_attachments(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        _, attachments = generate_report([report], for_email=True)
+        assert len(attachments) == 1
+        att = attachments[0]
+        assert att["content_type"] == "image/jpeg"
+        assert att["content_id"] == "detection-0"
+        assert att["filename"] == "detection-0.jpg"
+        assert isinstance(att["content"], str)  # base64-encoded
+
+    def test_for_email_html_uses_cid_src(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html, _ = generate_report([report], for_email=True)
+        assert 'src="cid:detection-0"' in html
+        assert "data:image" not in html
+
+    def test_email_heading_omits_mp4_filename(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html, _ = generate_report([report], for_email=True, include_video=False)
+        assert ".mp4" not in html
+
+    def test_non_email_returns_html_and_empty_attachments(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html, attachments = generate_report([report])
+        assert isinstance(html, str)
+        assert attachments == []
+        assert "data:image/png;base64," in html
+
+    def test_multiple_detections_produce_multiple_attachments(self) -> None:
+        moto = _make_detection("Motorcycle", 0.9)
+        bike = _make_detection("Bicycle", 0.7)
+        report = _make_clip_report(
+            hour=10, best=moto, class_detections={"Motorcycle": moto, "Bicycle": bike}
+        )
+        html, attachments = generate_report([report], for_email=True)
+        assert len(attachments) == 2
+        cids = {att["content_id"] for att in attachments}
+        assert "detection-0" in cids
+        assert "detection-1" in cids
+        assert 'src="cid:detection-0"' in html
+        assert 'src="cid:detection-1"' in html

@@ -152,7 +152,7 @@ class TestThresholdFiltering:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_sub_threshold_detections_excluded_from_clip_report(
         self,
         mock_generate_report: MagicMock,
@@ -220,7 +220,7 @@ class TestClaudeVerification:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_claude_verification_filters_rejected(
         self,
         mock_generate_report: MagicMock,
@@ -299,7 +299,7 @@ class TestClaudeVerification:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_claude_keep_rejected_preserves_all(
         self,
         mock_generate_report: MagicMock,
@@ -379,7 +379,7 @@ class TestPresentMode:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_present_mode_runs_both_detectors_with_claude(
         self,
         mock_generate_report: MagicMock,
@@ -527,7 +527,7 @@ class TestPresentMode:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_present_mode_merges_veh_and_hsp(
         self,
         mock_generate_report: MagicMock,
@@ -609,7 +609,7 @@ class TestPresentModeDebugReports:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_veh_debug_report_includes_below_threshold_detections(
         self,
         mock_generate_report: MagicMock,
@@ -690,7 +690,7 @@ class TestPresentModeDebugReports:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_hsp_debug_report_includes_below_threshold_tracks(
         self,
         mock_generate_report: MagicMock,
@@ -781,7 +781,7 @@ class TestPresentModeDebugReports:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_debug_reports_not_emailed(
         self,
         mock_generate_report: MagicMock,
@@ -832,7 +832,7 @@ class TestPresentModeDebugReports:
     @patch("lakeside_sentinel.main.HSPDetector")
     @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
     def test_debug_reports_not_opened_in_browser(
         self,
         mock_generate_report: MagicMock,

@@ -484,13 +484,12 @@ class Monitor:
         mode: str,
         title: str,
         send_email: bool,
-        label: str,
         subtitle: str | None = None,
     ) -> tuple[Path, str | None]:
         """Step 4: Generate HTML report and optionally send email."""
         print("\n[4/4] Generating HTML report...")
         settings_dict = self._settings.model_dump() if mode != "present" else None
-        html = generate_report(
+        html, _ = generate_report(
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
@@ -512,7 +511,7 @@ class Monitor:
 
         email_id: str | None = None
         if send_email:
-            email_html = generate_report(
+            email_html, email_attachments = generate_report(
                 clip_reports,
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
@@ -520,8 +519,11 @@ class Monitor:
                 mode=mode,
                 settings=settings_dict,
                 subtitle=subtitle,
+                for_email=True,
             )
-            email_id = self._email.send_report(email_html, f"{title} — {label}")
+            email_id = self._email.send_report(
+                email_html, f"{title} - {date_str}", attachments=email_attachments
+            )
             if email_id:
                 print(f"       Email sent ({email_id})")
             else:
@@ -538,7 +540,7 @@ class Monitor:
     ) -> Path:
         """Generate an HTML debug report and write to disk (no browser, no email)."""
         settings_dict = self._settings.model_dump()
-        html = generate_report(
+        html, _ = generate_report(
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
@@ -623,7 +625,6 @@ class Monitor:
             "present",
             "Motorized Vehicle Detection Report",
             send_email,
-            label,
             subtitle=date_str,
         )
 
@@ -678,7 +679,7 @@ class Monitor:
             )
 
         report_path, email_id = self._generate_and_send_report(
-            clip_reports, date_str, "veh", "VEH Detection Report", send_email, label
+            clip_reports, date_str, "veh", "VEH Detection Report", send_email
         )
 
         print(f"\n{'=' * 60}")
@@ -724,7 +725,7 @@ class Monitor:
 
         fps = self._settings.hsp_fps_sample
         report_path, email_id = self._generate_and_send_report(
-            clip_reports, date_str, "hsp", "HSP Detection Report", send_email, label
+            clip_reports, date_str, "hsp", "HSP Detection Report", send_email
         )
 
         print(f"\n{'=' * 60}")
