@@ -14,9 +14,8 @@ class Settings(BaseSettings):
     alert_email_to: str
     alert_email_from: str = "alerts@xeroshot.org"
 
-    # Detection
+    # Object Detection Model
     yolo_model: str = "yolo26s.pt"
-    vehicle_confidence_threshold: float = 0.4
     yolo_batch_size: int = 16
     crop_padding: float = 0.2
 
@@ -30,10 +29,11 @@ class Settings(BaseSettings):
     camera_latitude: float
     camera_longitude: float
 
-    # Frame sampling
-    fps_sample: int = 2
+    # Vehicle Detection (VEH)
+    veh_confidence_threshold: float = 0.4
+    veh_fps_sample: int = 2
 
-    # High-speed person detection (experimental)
+    # High-speed person detection (HSP)
     hsp_fps_sample: int = 4
     hsp_displacement_threshold: float = 60.0
     hsp_person_confidence_threshold: float = 0.4

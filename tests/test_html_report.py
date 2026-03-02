@@ -147,6 +147,10 @@ class TestGenerateReport:
         pos_30 = html.index("30%")
         assert pos_80 < pos_30
 
-    def test_report_title_is_daily_detection(self) -> None:
+    def test_report_default_title(self) -> None:
         html = generate_report([])
-        assert "Daily Detection Report" in html
+        assert "Detection Report" in html
+
+    def test_report_custom_title(self) -> None:
+        html = generate_report([], title="VEH Detection Report")
+        assert "VEH Detection Report" in html

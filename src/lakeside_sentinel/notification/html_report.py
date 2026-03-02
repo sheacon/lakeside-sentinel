@@ -1,4 +1,4 @@
-"""Self-contained HTML report for daily detection analysis."""
+"""Self-contained HTML report for detection analysis."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ def generate_report(
     clip_reports: list[ClipReport],
     crop_padding: float = 0.2,
     include_video: bool = True,
+    title: str = "Detection Report",
 ) -> str:
     """Generate a self-contained HTML report.
 
@@ -49,6 +50,7 @@ def generate_report(
         clip_reports: Analysis results for each clip.
         crop_padding: Padding fraction for cropping detection images.
         include_video: Whether to include video player elements.
+        title: Title for the HTML report.
 
     Returns:
         The generated HTML string.
@@ -138,14 +140,14 @@ def generate_report(
     html = (
         "<!DOCTYPE html>"
         '<html lang="en"><head><meta charset="utf-8"/>'
-        "<title>Daily Detection Report</title>"
+        f"<title>{title}</title>"
         '<meta name="viewport" content="width=device-width,initial-scale=1"/>'
         "<style>"
         "body{font-family:system-ui,sans-serif;max-width:900px;"
         "margin:0 auto;padding:20px;background:#fff}"
         "h1{margin-bottom:4px} .stats{color:#64748b;margin-bottom:24px}"
         "</style></head><body>"
-        "<h1>Daily Detection Report</h1>"
+        f"<h1>{title}</h1>"
         f'<p class="stats">{total_clips} clips analysed &middot; '
         f"{detected_clips} with detections (sorted by motorcycle confidence)</p>"
         + "".join(sections)

@@ -23,14 +23,14 @@ class TestSendReport:
     ) -> None:
         mock_resend.Emails.send.return_value = {"id": "email_123"}
 
-        result = sender.send_report("<h1>Report</h1>", "Daily Detection Report")
+        result = sender.send_report("<h1>Report</h1>", "VEH Detection Report")
 
         assert result == "email_123"
         mock_resend.Emails.send.assert_called_once()
         call_args = mock_resend.Emails.send.call_args[0][0]
         assert call_args["to"] == ["user@example.com"]
         assert call_args["from"] == "alerts@xeroshot.org"
-        assert call_args["subject"] == "Daily Detection Report"
+        assert call_args["subject"] == "VEH Detection Report"
         assert call_args["html"] == "<h1>Report</h1>"
         assert "attachments" not in call_args
 

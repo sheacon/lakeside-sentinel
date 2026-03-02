@@ -14,7 +14,7 @@ import numpy as np
 
 from lakeside_sentinel.detection.hsp_detector import HSPDetector, PersonTrack
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.detection.vehicle_detector import VehicleDetector
+from lakeside_sentinel.detection.veh_detector import VEHDetector
 from lakeside_sentinel.utils.image import crop_to_roi
 from lakeside_sentinel.utils.video import extract_frames
 
@@ -29,10 +29,10 @@ class RunConfig:
     """Single tuning run configuration."""
 
     run_id: int
-    mode: str  # "vehicle" or "hsp"
+    mode: str  # "veh" or "hsp"
     model_name: str
     fps_sample: int
-    # Vehicle-specific
+    # VEH-specific
     confidence_threshold: float = 0.4
     # HSP-specific
     hsp_displacement: float = 60.0
@@ -46,8 +46,8 @@ class RunConfig:
 
 
 @dataclass
-class VehicleRunResult:
-    """Result of a single vehicle tuning run."""
+class VEHRunResult:
+    """Result of a single VEH tuning run."""
 
     config: RunConfig
     best: Detection | None
@@ -69,7 +69,7 @@ class HSPRunResult:
     elapsed_secs: float
 
 
-def build_vehicle_configs(
+def build_veh_configs(
     models: list[str],
     fps_values: list[int],
     confidences: list[float],
@@ -78,7 +78,7 @@ def build_vehicle_configs(
     roi_x_start: float,
     roi_x_end: float,
 ) -> list[RunConfig]:
-    """Build RunConfig list from Cartesian product of vehicle sweep params."""
+    """Build RunConfig list from Cartesian product of VEH sweep params."""
     configs: list[RunConfig] = []
     for run_id, (model, fps, conf) in enumerate(
         itertools.product(models, fps_values, confidences), start=1
@@ -86,7 +86,7 @@ def build_vehicle_configs(
         configs.append(
             RunConfig(
                 run_id=run_id,
-                mode="vehicle",
+                mode="veh",
                 model_name=model,
                 fps_sample=fps,
                 confidence_threshold=conf,
@@ -242,12 +242,12 @@ def annotate_hsp_frame(
     return annotated
 
 
-def run_vehicle(
+def run_veh(
     config: RunConfig,
     frames_cache: dict[int, list[np.ndarray]],
-    model_cache: dict[str, tuple[VehicleDetector, dict[str, Detection]]],
-) -> VehicleRunResult:
-    """Execute a single vehicle tuning run.
+    model_cache: dict[str, tuple[VEHDetector, dict[str, Detection]]],
+) -> VEHRunResult:
+    """Execute a single VEH tuning run.
 
     The model_cache maps model_name -> (detector, class_best_from_detect_detailed).
     detect_detailed is called once per (model, fps) pair with conf=0.01,
@@ -260,7 +260,7 @@ def run_vehicle(
 
     # Check if we already ran detect_detailed for this model+fps
     if cache_key not in model_cache:
-        detector = _get_or_create_vehicle_detector(config.model_name, {})
+        detector = _get_or_create_veh_detector(config.model_name, {})
         _, class_best = detector.detect_detailed(frames)
         model_cache[cache_key] = (detector, class_best)
 
@@ -276,7 +276,7 @@ def run_vehicle(
         if det.confidence >= config.confidence_threshold:
             above_threshold[class_name] = det
 
-    return VehicleRunResult(
+    return VEHRunResult(
         config=config,
         best=best,
         class_best=above_threshold,
@@ -286,13 +286,13 @@ def run_vehicle(
     )
 
 
-def _get_or_create_vehicle_detector(
+def _get_or_create_veh_detector(
     model_name: str,
-    detector_cache: dict[str, VehicleDetector],
-) -> VehicleDetector:
-    """Get or create a VehicleDetector, caching by model name."""
+    detector_cache: dict[str, VEHDetector],
+) -> VEHDetector:
+    """Get or create a VEHDetector, caching by model name."""
     if model_name not in detector_cache:
-        detector_cache[model_name] = VehicleDetector(model_name=model_name)
+        detector_cache[model_name] = VEHDetector(model_name=model_name)
     return detector_cache[model_name]
 
 
@@ -352,8 +352,8 @@ def run_hsp(
     )
 
 
-def print_vehicle_table(results: list[VehicleRunResult]) -> None:
-    """Print a formatted vehicle results table to stdout."""
+def print_veh_table(results: list[VEHRunResult]) -> None:
+    """Print a formatted VEH results table to stdout."""
     header = (
         f"{'Run':>3} | {'Model':<10} | {'FPS':>3} | {'Conf Thr':>8} | {'Frames':>6} "
         f"| {'Best':<12} | {'Best Conf':>9} | {'Sub-threshold':<25} | {'Time':>6}"
@@ -414,7 +414,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  # Vehicle mode — sweep models and FPS\n"
+            "  # VEH mode — sweep models and FPS\n"
             "  python scripts/tune_detection.py --clip clip.mp4 "
             "--model yolo26s.pt yolo26m.pt --fps 2 4 8\n\n"
             "  # HSP mode — sweep displacement thresholds\n"
@@ -427,7 +427,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--hsp",
         action="store_true",
         default=False,
-        help="Use HSP detection mode instead of vehicle",
+        help="Use HSP detection mode instead of VEH",
     )
 
     # Shared sweep params
@@ -452,13 +452,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--roi-x-end", type=float, default=1.0, help="ROI horizontal end (0.0–1.0)")
 
-    # Vehicle-specific sweep params
+    # VEH-specific sweep params
     parser.add_argument(
         "--confidence",
         nargs="+",
         type=float,
         default=[0.4],
-        help="Confidence thresholds to sweep (vehicle mode)",
+        help="Confidence thresholds to sweep (VEH mode)",
     )
 
     # HSP-specific sweep params
@@ -513,7 +513,7 @@ def main() -> None:
             roi_x_end=args.roi_x_end,
         )
     else:
-        configs = build_vehicle_configs(
+        configs = build_veh_configs(
             models=args.model,
             fps_values=fps_values,
             confidences=args.confidence,
@@ -529,7 +529,7 @@ def main() -> None:
             len(configs),
         )
 
-    logger.info("Mode: %s | %d configurations", "HSP" if args.hsp else "Vehicle", len(configs))
+    logger.info("Mode: %s | %d configurations", "HSP" if args.hsp else "VEH", len(configs))
 
     mp4_bytes = clip_path.read_bytes()
     clip_stem = clip_path.stem
@@ -559,20 +559,20 @@ def main() -> None:
     if args.hsp:
         _run_hsp_sweep(configs, frames_cache, output_dir)
     else:
-        _run_vehicle_sweep(configs, frames_cache, output_dir)
+        _run_veh_sweep(configs, frames_cache, output_dir)
 
     logger.info("Annotated images saved to: %s", output_dir)
 
 
-def _run_vehicle_sweep(
+def _run_veh_sweep(
     configs: list[RunConfig],
     frames_cache: dict[int, list[np.ndarray]],
     output_dir: Path,
 ) -> None:
-    """Run all vehicle configs, save annotations, and print results."""
+    """Run all VEH configs, save annotations, and print results."""
     # Cache: (model_name, fps) -> (detector, class_best from detect_detailed)
-    model_cache: dict[str, tuple[VehicleDetector, dict[str, Detection]]] = {}
-    results: list[VehicleRunResult] = []
+    model_cache: dict[str, tuple[VEHDetector, dict[str, Detection]]] = {}
+    results: list[VEHRunResult] = []
 
     for config in configs:
         logger.info(
@@ -582,7 +582,7 @@ def _run_vehicle_sweep(
             config.fps_sample,
             config.confidence_threshold,
         )
-        result = run_vehicle(config, frames_cache, model_cache)
+        result = run_veh(config, frames_cache, model_cache)
         results.append(result)
 
         # Save annotated image if any detections found
@@ -599,7 +599,7 @@ def _run_vehicle_sweep(
             cv2.imwrite(str(out_path), annotated)
             logger.info("Saved annotated frame: %s", out_path)
 
-    print_vehicle_table(results)
+    print_veh_table(results)
 
 
 def _run_hsp_sweep(

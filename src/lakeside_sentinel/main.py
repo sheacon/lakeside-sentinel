@@ -12,7 +12,7 @@ from lakeside_sentinel.cli import parse_args
 from lakeside_sentinel.config import Settings
 from lakeside_sentinel.detection.hsp_detector import HSPDetector
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.detection.vehicle_detector import VehicleDetector
+from lakeside_sentinel.detection.veh_detector import VEHDetector
 from lakeside_sentinel.notification.email_sender import EmailSender
 from lakeside_sentinel.notification.html_report import ClipReport, generate_report
 from lakeside_sentinel.utils.daylight import (
@@ -51,9 +51,9 @@ class Monitor:
         self._settings = settings
         self._auth = NestAuth(settings.google_master_token, settings.google_username)
         self._api = NestCameraAPI(self._auth, settings.nest_device_id)
-        self._detector = VehicleDetector(
+        self._veh_detector = VEHDetector(
             model_name=settings.yolo_model,
-            confidence_threshold=settings.vehicle_confidence_threshold,
+            confidence_threshold=settings.veh_confidence_threshold,
             batch_size=settings.yolo_batch_size,
         )
         self._email = EmailSender(
@@ -90,7 +90,7 @@ class Monitor:
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = f"DAILY DETECTION — {target_date.isoformat()}"
+            label = f"VEH DETECTION — {target_date.isoformat()}"
         else:
             now = datetime.now(timezone.utc)
             start, end = get_daylight_span(
@@ -98,7 +98,7 @@ class Monitor:
                 self._settings.camera_latitude,
                 self._settings.camera_longitude,
             )
-            label = "DAILY DETECTION — Most recent daylight"
+            label = "VEH DETECTION — Most recent daylight"
         now = end
 
         print(f"\n{'=' * 60}")
@@ -196,7 +196,7 @@ class Monitor:
             local_time = event.start_time.astimezone()
             label = local_time.strftime("%H:%M:%S")
 
-            frames = extract_frames(mp4_bytes, fps_sample=self._settings.fps_sample)
+            frames = extract_frames(mp4_bytes, fps_sample=self._settings.veh_fps_sample)
             frames = crop_to_roi(
                 frames,
                 y_start=self._settings.roi_y_start,
@@ -218,13 +218,13 @@ class Monitor:
                 )
                 continue
 
-            detection, class_best = self._detector.detect_detailed(frames)
+            detection, class_best = self._veh_detector.detect_detailed(frames)
 
             # Filter to only above-threshold detections for the report
             class_above = {
                 name: det
                 for name, det in class_best.items()
-                if det.confidence >= self._settings.vehicle_confidence_threshold
+                if det.confidence >= self._settings.veh_confidence_threshold
             }
 
             mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
@@ -239,7 +239,8 @@ class Monitor:
 
             if detection is None:
                 print(
-                    f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — no vehicle",
+                    f"  [{idx + 1:3d}/{len(clips)}] {label}"
+                    f" — {len(frames):2d} frames — no detection",
                     flush=True,
                 )
                 if class_best:
@@ -265,8 +266,9 @@ class Monitor:
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
+            title="VEH Detection Report",
         )
-        report_path = Path("output") / f"report-{date_str}.html"
+        report_path = Path("output") / f"report-veh-{date_str}.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
@@ -279,15 +281,16 @@ class Monitor:
                 clip_reports,
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
+                title="VEH Detection Report",
             )
-            email_id = self._email.send_report(email_html, f"Daily Detection Report — {label}")
+            email_id = self._email.send_report(email_html, f"VEH Detection Report — {label}")
             if email_id:
                 print(f"       Email sent ({email_id})")
             else:
                 print("       Email FAILED")
 
         print(f"\n{'=' * 60}")
-        print("  DAILY DETECTION COMPLETE")
+        print("  VEH DETECTION COMPLETE")
         print(f"  Events:     {len(events)}")
         print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
         print(f"  Frames:     {total_frames} analyzed")
@@ -497,6 +500,7 @@ class Monitor:
             clip_reports,
             crop_padding=self._settings.crop_padding,
             include_video=True,
+            title="HSP Detection Report",
         )
         report_path = Path("output") / f"report-hsp-{date_str}.html"
         report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -511,6 +515,7 @@ class Monitor:
                 clip_reports,
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
+                title="HSP Detection Report",
             )
             email_id = self._email.send_report(email_html, f"HSP Detection Report — {label}")
             if email_id:
@@ -541,10 +546,10 @@ def main() -> None:
 
     monitor = Monitor(settings)
 
-    if args.hsp:
-        monitor.run_hsp(send_email=args.email, target_date=target_date)
-    else:
+    if args.veh:
         monitor.run(send_email=args.email, target_date=target_date)
+    elif args.hsp:
+        monitor.run_hsp(send_email=args.email, target_date=target_date)
 
 
 if __name__ == "__main__":

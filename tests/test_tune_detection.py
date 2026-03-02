@@ -15,7 +15,7 @@ from tune_detection import (
     apply_threshold,
     build_hsp_configs,
     build_parser,
-    build_vehicle_configs,
+    build_veh_configs,
 )
 
 from lakeside_sentinel.detection.models import Detection
@@ -34,12 +34,12 @@ def _make_detection(class_name: str, confidence: float) -> Detection:
     )
 
 
-# --- build_vehicle_configs tests ---
+# --- build_veh_configs tests ---
 
 
-class TestBuildVehicleConfigs:
+class TestBuildVEHConfigs:
     def test_single_values(self) -> None:
-        configs = build_vehicle_configs(
+        configs = build_veh_configs(
             models=["yolo26s.pt"],
             fps_values=[2],
             confidences=[0.4],
@@ -51,13 +51,13 @@ class TestBuildVehicleConfigs:
         assert len(configs) == 1
         c = configs[0]
         assert c.run_id == 1
-        assert c.mode == "vehicle"
+        assert c.mode == "veh"
         assert c.model_name == "yolo26s.pt"
         assert c.fps_sample == 2
         assert c.confidence_threshold == 0.4
 
     def test_cartesian_product(self) -> None:
-        configs = build_vehicle_configs(
+        configs = build_veh_configs(
             models=["yolo26s.pt", "yolo26m.pt"],
             fps_values=[2, 4],
             confidences=[0.3, 0.5],
@@ -72,7 +72,7 @@ class TestBuildVehicleConfigs:
         assert configs[-1].run_id == 8
 
     def test_roi_propagated(self) -> None:
-        configs = build_vehicle_configs(
+        configs = build_veh_configs(
             models=["yolo26s.pt"],
             fps_values=[2],
             confidences=[0.4],
@@ -88,7 +88,7 @@ class TestBuildVehicleConfigs:
         assert c.roi_x_end == 0.8
 
     def test_run_ids_sequential(self) -> None:
-        configs = build_vehicle_configs(
+        configs = build_veh_configs(
             models=["a.pt", "b.pt", "c.pt"],
             fps_values=[1],
             confidences=[0.4],
@@ -210,7 +210,7 @@ class TestApplyThreshold:
 
 
 class TestArgparse:
-    def test_vehicle_defaults(self) -> None:
+    def test_veh_defaults(self) -> None:
         parser = build_parser()
         args = parser.parse_args(["--clip", "test.mp4"])
         assert args.clip == Path("test.mp4")

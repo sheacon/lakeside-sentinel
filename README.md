@@ -9,7 +9,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using [YOL
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & daily run logic
-├── cli.py                 # CLI argument parser (--date, --email, --hsp)
+├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -18,7 +18,7 @@ src/lakeside_sentinel/
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
-│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
+│   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
 │   └── html_report.py     # Self-contained HTML report generation
@@ -40,16 +40,16 @@ cp .env.example .env  # then fill in credentials
 ## Running
 
 ```bash
-python -m lakeside_sentinel              # analyze most recent daylight period
-python -m lakeside_sentinel --email      # also send an email report (no embedded videos)
-python -m lakeside_sentinel --date 2026-02-28  # analyze a specific date's daylight
-python -m lakeside_sentinel --hsp        # experimental HSP detection
-python -m lakeside_sentinel --hsp --email  # HSP detection with email report
+python -m lakeside_sentinel --veh              # VEH mode: most recent daylight period
+python -m lakeside_sentinel --veh --email      # VEH mode with email report
+python -m lakeside_sentinel --veh --date 2026-02-28  # VEH mode for a specific date
+python -m lakeside_sentinel --hsp              # HSP detection mode
+python -m lakeside_sentinel --hsp --email      # HSP detection with email report
 ```
 
 ## Scheduling
 
-The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs the detector with email reporting. Hook it into your preferred scheduler:
+The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs VEH detection with email reporting. Hook it into your preferred scheduler:
 
 **cron** (daily at 21:00):
 ```bash
@@ -136,14 +136,14 @@ See `.env.example` for the full list. Key variables:
 | `CAMERA_LATITUDE` | — | Camera latitude (daylight filtering) |
 | `CAMERA_LONGITUDE` | — | Camera longitude (daylight filtering) |
 | `YOLO_MODEL` | `yolo26s.pt` | YOLO model weights file |
-| `VEHICLE_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts and report inclusion |
+| `VEH_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts and report inclusion |
 | `YOLO_BATCH_SIZE` | `16` | Frames per YOLO inference batch (prevents GPU OOM) |
 | `CROP_PADDING` | `0.2` | Padding around detected bounding box |
 | `ROI_Y_START` | `0.0` | Vertical region of interest start (fraction 0.0–1.0) |
 | `ROI_Y_END` | `1.0` | Vertical region of interest end (fraction 0.0–1.0) |
 | `ROI_X_START` | `0.0` | Horizontal region of interest start (fraction 0.0–1.0) |
 | `ROI_X_END` | `1.0` | Horizontal region of interest end (fraction 0.0–1.0) |
-| `FPS_SAMPLE` | `2` | Frames extracted per second of video |
+| `VEH_FPS_SAMPLE` | `2` | Frames extracted per second for VEH mode |
 | `HSP_FPS_SAMPLE` | `4` | Frames per second for HSP mode (higher = better tracking) |
 | `HSP_DISPLACEMENT_THRESHOLD` | `60.0` | Min centroid displacement (px/interval) to flag as HSP |
 | `HSP_PERSON_CONFIDENCE_THRESHOLD` | `0.4` | Min YOLO person confidence for tracking |

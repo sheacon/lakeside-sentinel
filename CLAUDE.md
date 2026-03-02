@@ -6,8 +6,8 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 
 ```
 src/lakeside_sentinel/
-├── main.py                # Monitor orchestration & daily run logic
-├── cli.py                 # CLI argument parser (--date, --email, --hsp)
+├── main.py                # Monitor orchestration & run logic
+├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -16,7 +16,7 @@ src/lakeside_sentinel/
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
-│   └── vehicle_detector.py # YOLO vehicle detection (classes 1,3), dynamic imgsz
+│   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
 │   └── html_report.py     # Self-contained HTML report generation
@@ -37,22 +37,24 @@ cp .env.example .env  # then fill in credentials
 
 ## Running
 
+A mode (`--veh` or `--hsp`) must be specified — there is no default.
+
 ```bash
-python -m lakeside_sentinel              # analyze most recent daylight period
-python -m lakeside_sentinel --email      # also send an email report (no embedded videos)
-python -m lakeside_sentinel --date 2026-02-28  # analyze a specific date's daylight
-python -m lakeside_sentinel --hsp        # experimental HSP detection
-python -m lakeside_sentinel --hsp --email  # HSP detection with email report
+python -m lakeside_sentinel --veh              # VEH mode: most recent daylight period
+python -m lakeside_sentinel --veh --email      # VEH mode with email report
+python -m lakeside_sentinel --veh --date 2026-02-28  # VEH mode for a specific date
+python -m lakeside_sentinel --hsp              # HSP detection mode
+python -m lakeside_sentinel --hsp --email      # HSP detection with email report
 ```
 
-Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
+Scheduled via `run.sh` (passes `--veh --email`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
 
 ## Tuning
 
 `scripts/tune_detection.py` sweeps detection parameters on a video clip via CLI flags. Multi-value flags create a Cartesian product sweep.
 
 ```bash
-# Vehicle mode — sweep models, FPS, and confidence thresholds
+# VEH mode — sweep models, FPS, and confidence thresholds
 python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --model yolo26s.pt yolo26m.pt \
     --fps 2 4 8 \
@@ -95,10 +97,10 @@ See `.env.example` for the full list. Key variables:
 - `RESEND_API_KEY`, `ALERT_EMAIL_TO`, `ALERT_EMAIL_FROM` - email alerts
 - `CAMERA_LATITUDE`, `CAMERA_LONGITUDE` - camera location (daylight filtering)
 - `YOLO_MODEL` (default `yolo26s.pt`) - YOLO model weights file
-- `VEHICLE_CONFIDENCE_THRESHOLD` (default 0.4) - filters alerts and HTML report class detections, `YOLO_BATCH_SIZE` (default 16), `CROP_PADDING` (default 0.2)
+- `VEH_CONFIDENCE_THRESHOLD` (default 0.4) - filters alerts and HTML report class detections, `YOLO_BATCH_SIZE` (default 16), `CROP_PADDING` (default 0.2)
 - `ROI_Y_START` (default 0.0), `ROI_Y_END` (default 1.0) - vertical region of interest (fraction 0.0–1.0)
 - `ROI_X_START` (default 0.0), `ROI_X_END` (default 1.0) - horizontal region of interest (fraction 0.0–1.0)
-- `FPS_SAMPLE` (default 2) - frames extracted per second of video
+- `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
 

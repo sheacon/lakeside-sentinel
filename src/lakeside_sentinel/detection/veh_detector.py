@@ -10,14 +10,14 @@ from lakeside_sentinel.detection.models import Detection
 
 logger = logging.getLogger(__name__)
 
-VEHICLE_CLASSES: dict[int, str] = {
+VEH_CLASSES: dict[int, str] = {
     1: "Bicycle",
     3: "Motorcycle",
 }
 
 
-class VehicleDetector:
-    """Detects vehicles in frames using YOLO."""
+class VEHDetector:
+    """Detects vehicles (bicycles, motorcycles) in frames using YOLO."""
 
     def __init__(
         self,
@@ -94,22 +94,22 @@ class VehicleDetector:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])
 
-                if cls in VEHICLE_CLASSES and conf >= self._confidence_threshold:
+                if cls in VEH_CLASSES and conf >= self._confidence_threshold:
                     if best is None or conf > best.confidence:
                         x1, y1, x2, y2 = box.xyxy[0].tolist()
                         best = Detection(
                             frame=frame,
                             bbox=(x1, y1, x2, y2),
                             confidence=conf,
-                            class_name=VEHICLE_CLASSES[cls],
+                            class_name=VEH_CLASSES[cls],
                         )
 
         if best:
             logger.info(
-                "Best vehicle detection: %s (confidence=%.2f)", best.class_name, best.confidence
+                "Best VEH detection: %s (confidence=%.2f)", best.class_name, best.confidence
             )
         else:
-            logger.debug("No vehicle detected in %d frames", len(frames))
+            logger.debug("No VEH detection in %d frames", len(frames))
 
         return best
 
@@ -141,10 +141,10 @@ class VehicleDetector:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])
 
-                if cls not in VEHICLE_CLASSES:
+                if cls not in VEH_CLASSES:
                     continue
 
-                class_name = VEHICLE_CLASSES[cls]
+                class_name = VEH_CLASSES[cls]
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 det = Detection(
                     frame=frame,
@@ -163,9 +163,9 @@ class VehicleDetector:
 
         if best:
             logger.info(
-                "Best vehicle detection: %s (confidence=%.2f)", best.class_name, best.confidence
+                "Best VEH detection: %s (confidence=%.2f)", best.class_name, best.confidence
             )
         else:
-            logger.debug("No vehicle detected in %d frames", len(frames))
+            logger.debug("No VEH detection in %d frames", len(frames))
 
         return best, class_best

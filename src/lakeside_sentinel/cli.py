@@ -16,9 +16,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Send an email report (HTML without embedded videos).",
     )
-    parser.add_argument(
+
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument(
+        "--veh",
+        action="store_true",
+        help="Run vehicle detection (VEH) mode.",
+    )
+    mode_group.add_argument(
         "--hsp",
         action="store_true",
-        help="Experimental: detect high-speed persons (HSP) via motion tracking.",
+        help="Run high-speed person (HSP) detection mode.",
     )
     return parser.parse_args()

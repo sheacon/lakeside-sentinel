@@ -57,7 +57,7 @@ class TestPrintSettings:
         _print_settings(mock_settings)
         output = capsys.readouterr().out
         assert str(mock_settings.yolo_model) in output
-        assert str(mock_settings.fps_sample) in output
+        assert str(mock_settings.veh_fps_sample) in output
         assert mock_settings.alert_email_to in output
 
 
@@ -65,7 +65,7 @@ class TestRunCache:
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
-    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     def test_cached_files_are_read_from_disk(
         self,
@@ -103,7 +103,7 @@ class TestRunCache:
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
-    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     def test_missing_files_are_downloaded_and_written(
         self,
@@ -145,7 +145,7 @@ class TestThresholdFiltering:
     @patch("lakeside_sentinel.main.extract_frames")
     @patch("lakeside_sentinel.main.NestCameraAPI")
     @patch("lakeside_sentinel.main.NestAuth")
-    @patch("lakeside_sentinel.main.VehicleDetector")
+    @patch("lakeside_sentinel.main.VEHDetector")
     @patch("lakeside_sentinel.main.EmailSender")
     @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
     def test_sub_threshold_detections_excluded_from_clip_report(
