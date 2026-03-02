@@ -14,13 +14,13 @@ src/lakeside_sentinel/
 │   ├── models.py          # CameraEvent dataclass (frozen)
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
-│   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
+│   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name, verification_response)
 │   ├── claude_verifier.py # Claude Vision verification of YOLO detections
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
-│   └── html_report.py     # Self-contained HTML report generation
+│   └── html_report.py     # Self-contained HTML report with Claude response text
 └── utils/
     ├── daylight.py        # Sunrise/sunset filtering & daylight spans via astral
     ├── image.py           # ROI cropping & bounding box cropping with padding
@@ -125,7 +125,7 @@ See `.env.example` for the full list. Key variables:
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
 - `ANTHROPIC_API_KEY` - API key for Claude Vision verification (optional, required for `--claude`)
-- `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification)
+- `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
 
 ## Conventions
 
