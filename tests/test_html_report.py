@@ -154,3 +154,26 @@ class TestGenerateReport:
     def test_report_custom_title(self) -> None:
         html = generate_report([], title="VEH Detection Report")
         assert "VEH Detection Report" in html
+
+    def test_verified_badge_shown_for_confirmed(self) -> None:
+        det = _make_detection("Motorcycle", 0.9)
+        det.verification_status = "confirmed"
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report])
+        assert "Claude verified" in html
+        assert "Claude rejected" not in html
+
+    def test_rejected_badge_shown_for_rejected(self) -> None:
+        det = _make_detection("Bicycle", 0.7)
+        det.verification_status = "rejected"
+        report = _make_clip_report(hour=10, best=det, class_detections={"Bicycle": det})
+        html = generate_report([report])
+        assert "Claude rejected" in html
+        assert "Claude verified" not in html
+
+    def test_no_badge_when_not_verified(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report])
+        assert "Claude verified" not in html
+        assert "Claude rejected" not in html

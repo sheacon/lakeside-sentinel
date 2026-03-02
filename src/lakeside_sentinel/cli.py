@@ -16,6 +16,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Send an email report (HTML without embedded videos).",
     )
+    parser.add_argument(
+        "--claude",
+        action="store_true",
+        help="Enable Claude Vision verification of detections (requires ANTHROPIC_API_KEY).",
+    )
+    parser.add_argument(
+        "--claude-keep-rejected",
+        action="store_true",
+        help="Keep rejected detections in the HTML report (default: remove them).",
+    )
 
     mode_group = parser.add_mutually_exclusive_group(required=True)
     mode_group.add_argument(

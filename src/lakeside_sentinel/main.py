@@ -10,6 +10,7 @@ from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.camera.nest_api import NestCameraAPI
 from lakeside_sentinel.cli import parse_args
 from lakeside_sentinel.config import Settings
+from lakeside_sentinel.detection.claude_verifier import ClaudeVerifier
 from lakeside_sentinel.detection.hsp_detector import HSPDetector
 from lakeside_sentinel.detection.models import Detection
 from lakeside_sentinel.detection.veh_detector import VEHDetector
@@ -82,7 +83,13 @@ class Monitor:
             )
         return daylight_events
 
-    def run(self, send_email: bool = False, target_date: date | None = None) -> None:
+    def run(
+        self,
+        send_email: bool = False,
+        target_date: date | None = None,
+        use_claude: bool = False,
+        claude_keep_rejected: bool = False,
+    ) -> None:
         """Download and analyze events for a daylight period."""
         if target_date is not None:
             start, end = get_daylight_span_for_date(
@@ -261,6 +268,47 @@ class Monitor:
             )
             print(f"            {breakdown}")
 
+        if use_claude:
+            print("\n[3.5/4] Verifying detections with Claude Vision...")
+            verifier = ClaudeVerifier(
+                api_key=self._settings.anthropic_api_key,
+                model=self._settings.claude_vision_model,
+                crop_padding=self._settings.crop_padding,
+            )
+            confirmed_count = 0
+            rejected_count = 0
+            for idx, report in enumerate(clip_reports):
+                if not report.class_detections:
+                    continue
+                verified = verifier.verify_detections(report.class_detections)
+                rejected_in_clip = len(report.class_detections) - len(verified)
+                confirmed_count += len(verified)
+                rejected_count += rejected_in_clip
+
+                if claude_keep_rejected:
+                    new_class_dets = report.class_detections
+                else:
+                    new_class_dets = verified
+
+                # Pick best confirmed detection (or None if all rejected)
+                confirmed_dets = [
+                    d for d in new_class_dets.values() if d.verification_status == "confirmed"
+                ]
+                error_dets = [d for d in new_class_dets.values() if d.verification_status is None]
+                candidates = confirmed_dets + error_dets
+                new_best = max(candidates, key=lambda d: d.confidence) if candidates else None
+
+                clip_reports[idx] = ClipReport(
+                    event_time=report.event_time,
+                    mp4_filename=report.mp4_filename,
+                    best_detection=new_best,
+                    class_detections=new_class_dets,
+                )
+            print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
+
+            # Recount detections after verification
+            detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
+
         print("\n[4/4] Generating HTML report...")
         html = generate_report(
             clip_reports,
@@ -301,7 +349,13 @@ class Monitor:
         print(f"  Clips:      {dump_dir.resolve()}")
         print(f"{'=' * 60}\n")
 
-    def run_hsp(self, send_email: bool = False, target_date: date | None = None) -> None:
+    def run_hsp(
+        self,
+        send_email: bool = False,
+        target_date: date | None = None,
+        use_claude: bool = False,
+        claude_keep_rejected: bool = False,
+    ) -> None:
         """Run with experimental high-speed person (HSP) detection."""
         if target_date is not None:
             start, end = get_daylight_span_for_date(
@@ -495,6 +549,45 @@ class Monitor:
                 flush=True,
             )
 
+        if use_claude:
+            print(f"\n[3.5/4] Verifying detections with Claude Vision (fps={fps})...")
+            verifier = ClaudeVerifier(
+                api_key=self._settings.anthropic_api_key,
+                model=self._settings.claude_vision_model,
+                crop_padding=self._settings.crop_padding,
+            )
+            confirmed_count = 0
+            rejected_count = 0
+            for idx, report in enumerate(clip_reports):
+                if not report.class_detections:
+                    continue
+                verified = verifier.verify_detections(report.class_detections)
+                rejected_in_clip = len(report.class_detections) - len(verified)
+                confirmed_count += len(verified)
+                rejected_count += rejected_in_clip
+
+                if claude_keep_rejected:
+                    new_class_dets = report.class_detections
+                else:
+                    new_class_dets = verified
+
+                confirmed_dets = [
+                    d for d in new_class_dets.values() if d.verification_status == "confirmed"
+                ]
+                error_dets = [d for d in new_class_dets.values() if d.verification_status is None]
+                candidates = confirmed_dets + error_dets
+                new_best = max(candidates, key=lambda d: d.confidence) if candidates else None
+
+                clip_reports[idx] = ClipReport(
+                    event_time=report.event_time,
+                    mp4_filename=report.mp4_filename,
+                    best_detection=new_best,
+                    class_detections=new_class_dets,
+                )
+            print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
+
+            detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
+
         print("\n[4/4] Generating HTML report...")
         html = generate_report(
             clip_reports,
@@ -540,6 +633,10 @@ def main() -> None:
     args = parse_args()
     settings = Settings()  # type: ignore[call-arg]
 
+    if args.claude and not settings.anthropic_api_key:
+        logger.error("--claude requires ANTHROPIC_API_KEY to be set in .env")
+        raise SystemExit(1)
+
     target_date: date | None = None
     if args.date:
         target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
@@ -547,9 +644,19 @@ def main() -> None:
     monitor = Monitor(settings)
 
     if args.veh:
-        monitor.run(send_email=args.email, target_date=target_date)
+        monitor.run(
+            send_email=args.email,
+            target_date=target_date,
+            use_claude=args.claude,
+            claude_keep_rejected=args.claude_keep_rejected,
+        )
     elif args.hsp:
-        monitor.run_hsp(send_email=args.email, target_date=target_date)
+        monitor.run_hsp(
+            send_email=args.email,
+            target_date=target_date,
+            use_claude=args.claude,
+            claude_keep_rejected=args.claude_keep_rejected,
+        )
 
 
 if __name__ == "__main__":

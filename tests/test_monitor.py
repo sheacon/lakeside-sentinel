@@ -202,3 +202,158 @@ class TestThresholdFiltering:
         assert "Bicycle" not in report.class_detections
         # Above-threshold Motorcycle should remain
         assert "Motorcycle" in report.class_detections
+
+
+class TestClaudeVerification:
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_claude_verification_filters_rejected(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_detector_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        bike_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.65,
+            class_name="Bicycle",
+        )
+        mock_detector_cls.return_value.detect_detailed.return_value = (
+            moto_det,
+            {"Motorcycle": moto_det, "Bicycle": bike_det},
+        )
+
+        # Claude verifier confirms motorcycle, rejects bicycle
+        def mock_verify_detections(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for name, det in detections.items():
+                if name == "Motorcycle":
+                    det.verification_status = "confirmed"
+                else:
+                    det.verification_status = "rejected"
+            return {"Motorcycle": detections["Motorcycle"]}
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify_detections
+
+        monitor = Monitor(mock_settings)
+        monitor.run(use_claude=True)
+
+        clip_reports = mock_generate_report.call_args_list[0][0][0]
+        assert len(clip_reports) == 1
+        report = clip_reports[0]
+
+        # Bicycle should be filtered out by Claude verification
+        assert "Bicycle" not in report.class_detections
+        assert "Motorcycle" in report.class_detections
+        assert report.best_detection is not None
+        assert report.best_detection.verification_status == "confirmed"
+
+    @patch("lakeside_sentinel.main.webbrowser.open")
+    @patch("lakeside_sentinel.main.ClaudeVerifier")
+    @patch("lakeside_sentinel.main.crop_to_roi")
+    @patch("lakeside_sentinel.main.extract_frames")
+    @patch("lakeside_sentinel.main.NestCameraAPI")
+    @patch("lakeside_sentinel.main.NestAuth")
+    @patch("lakeside_sentinel.main.VEHDetector")
+    @patch("lakeside_sentinel.main.EmailSender")
+    @patch("lakeside_sentinel.main.generate_report", return_value="<html></html>")
+    def test_claude_keep_rejected_preserves_all(
+        self,
+        mock_generate_report: MagicMock,
+        mock_email_cls: MagicMock,
+        mock_detector_cls: MagicMock,
+        mock_auth_cls: MagicMock,
+        mock_api_cls: MagicMock,
+        mock_extract_frames: MagicMock,
+        mock_crop_to_roi: MagicMock,
+        mock_verifier_cls: MagicMock,
+        mock_webbrowser_open: MagicMock,
+        mock_settings: Settings,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        mock_settings.anthropic_api_key = "test-key"
+
+        event = _make_event(hour=12)
+        mock_api = mock_api_cls.return_value
+        mock_api.get_events.return_value = [event]
+        mock_api.download_clip.return_value = b"video_data"
+
+        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        mock_extract_frames.return_value = [dummy_frame]
+        mock_crop_to_roi.return_value = [dummy_frame]
+
+        moto_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.85,
+            class_name="Motorcycle",
+        )
+        bike_det = Detection(
+            frame=dummy_frame,
+            bbox=(10.0, 10.0, 90.0, 90.0),
+            confidence=0.65,
+            class_name="Bicycle",
+        )
+        mock_detector_cls.return_value.detect_detailed.return_value = (
+            moto_det,
+            {"Motorcycle": moto_det, "Bicycle": bike_det},
+        )
+
+        # Claude rejects bicycle but keep-rejected is on
+        def mock_verify_detections(detections: dict[str, Detection]) -> dict[str, Detection]:
+            for name, det in detections.items():
+                if name == "Motorcycle":
+                    det.verification_status = "confirmed"
+                else:
+                    det.verification_status = "rejected"
+            return {"Motorcycle": detections["Motorcycle"]}
+
+        mock_verifier_cls.return_value.verify_detections.side_effect = mock_verify_detections
+
+        monitor = Monitor(mock_settings)
+        monitor.run(use_claude=True, claude_keep_rejected=True)
+
+        clip_reports = mock_generate_report.call_args_list[0][0][0]
+        report = clip_reports[0]
+
+        # Both should be preserved with keep-rejected
+        assert "Motorcycle" in report.class_detections
+        assert "Bicycle" in report.class_detections
+        assert report.best_detection is not None
+        assert report.best_detection.class_name == "Motorcycle"

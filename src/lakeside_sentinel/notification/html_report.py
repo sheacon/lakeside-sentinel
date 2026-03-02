@@ -91,6 +91,17 @@ def generate_report(
             ):
                 img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding)
                 conf_pct = f"{det.confidence:.0%}"
+                badge_html = ""
+                if det.verification_status == "confirmed":
+                    badge_html = (
+                        '<div style="color:#16a34a;font-size:0.8em;margin-top:4px">'
+                        "&#10003; Claude verified</div>"
+                    )
+                elif det.verification_status == "rejected":
+                    badge_html = (
+                        '<div style="color:#dc2626;font-size:0.8em;margin-top:4px">'
+                        "&#10007; Claude rejected</div>"
+                    )
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
                     f'text-align:center;width:160px">'
@@ -98,6 +109,7 @@ def generate_report(
                     f'border-radius:4px;display:block;margin:0 auto 6px" />'
                     f"<strong>{class_name}</strong><br/>"
                     f'<span style="color:#64748b">{conf_pct}</span>'
+                    f"{badge_html}"
                     f"</div>"
                 )
             cards_html = (

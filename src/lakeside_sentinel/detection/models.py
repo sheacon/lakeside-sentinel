@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -11,3 +11,4 @@ class Detection:
     bbox: tuple[float, float, float, float]  # x1, y1, x2, y2
     confidence: float
     class_name: str
+    verification_status: str | None = field(default=None)

@@ -18,6 +18,7 @@ dependencies = [
     "isodate>=0.6.1",
     "python-dotenv>=1.0.0",
     "astral>=3.2",
+    "anthropic>=0.42.0",
 ]
 
 [project.optional-dependencies]

@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & run logic
-├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email)
+├── cli.py                 # CLI argument parser (--veh, --hsp, --date, --email, --claude)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -15,6 +15,7 @@ src/lakeside_sentinel/
 │   └── nest_api.py        # Nest API client, MPEG-DASH XML parsing
 ├── detection/
 │   ├── models.py          # Detection dataclass (frame, bbox, confidence, class_name)
+│   ├── claude_verifier.py # Claude Vision verification of YOLO detections
 │   ├── hsp_detector.py    # Experimental: person tracking + centroid displacement (HSP)
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
@@ -43,8 +44,11 @@ A mode (`--veh` or `--hsp`) must be specified — there is no default.
 python -m lakeside_sentinel --veh              # VEH mode: most recent daylight period
 python -m lakeside_sentinel --veh --email      # VEH mode with email report
 python -m lakeside_sentinel --veh --date 2026-02-28  # VEH mode for a specific date
+python -m lakeside_sentinel --veh --claude     # VEH mode with Claude Vision verification
+python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected in report
 python -m lakeside_sentinel --hsp              # HSP detection mode
 python -m lakeside_sentinel --hsp --email      # HSP detection with email report
+python -m lakeside_sentinel --hsp --claude     # HSP mode with Claude Vision verification
 ```
 
 Scheduled via `run.sh` (passes `--veh --email`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
@@ -76,7 +80,7 @@ Annotated images are saved to `output/tune/{clip_stem}/`. Results are printed as
 ## Testing
 
 ```bash
-pytest tests/                    # tests across 9 modules
+pytest tests/                    # tests across 10 modules
 pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 
@@ -103,6 +107,8 @@ See `.env.example` for the full list. Key variables:
 - `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 60.0) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 200.0) - HSP tracking
+- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (optional, required for `--claude`)
+- `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification
 
 ## Conventions
 

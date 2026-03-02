@@ -38,3 +38,7 @@ class Settings(BaseSettings):
     hsp_displacement_threshold: float = 60.0
     hsp_person_confidence_threshold: float = 0.4
     hsp_max_match_distance: float = 200.0
+
+    # Claude Vision verification (optional)
+    anthropic_api_key: str = ""
+    claude_vision_model: str = "claude-sonnet-4-20250514"
