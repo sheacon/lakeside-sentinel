@@ -29,13 +29,32 @@ class ClipReport:
     class_detections: dict[str, Detection]
 
 
+def _sharpen_image(image: np.ndarray, sigma: float = 1.0, strength: float = 1.5) -> np.ndarray:
+    """Apply unsharp mask sharpening to an image."""
+    blurred = cv2.GaussianBlur(image, (0, 0), sigma)
+    return cv2.addWeighted(image, 1.0 + strength, blurred, -strength, 0)
+
+
 def _encode_cropped_png(
     frame: np.ndarray,
     bbox: tuple[float, float, float, float],
     padding: float,
+    *,
+    enhance: bool = False,
 ) -> str:
-    """Crop a detection and return a base64-encoded PNG data URI."""
+    """Crop a detection and return a base64-encoded PNG data URI.
+
+    Args:
+        frame: The full video frame.
+        bbox: Bounding box coordinates (x1, y1, x2, y2).
+        padding: Padding fraction for cropping.
+        enhance: When True, upscale 2x with cubic interpolation and sharpen.
+    """
     cropped = crop_to_bbox(frame, bbox, padding=padding)
+    if enhance:
+        h, w = cropped.shape[:2]
+        cropped = cv2.resize(cropped, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
+        cropped = _sharpen_image(cropped)
     _, png_bytes = cv2.imencode(".png", cropped)
     b64 = base64.b64encode(png_bytes.tobytes()).decode()
     return f"data:image/png;base64,{b64}"
@@ -136,7 +155,7 @@ def generate_report(
                 key=lambda x: x[1].confidence,
                 reverse=True,
             ):
-                img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding)
+                img_uri = _encode_cropped_png(det.frame, det.bbox, crop_padding, enhance=is_present)
 
                 if is_present:
                     # Present mode: generic label, no metrics, no Claude info
@@ -169,10 +188,12 @@ def generate_report(
                             f"Claude: &ldquo;{det.verification_response}&rdquo;</div>"
                         )
 
+                card_w = 320 if is_present else 160
+                img_max = 288 if is_present else 144
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
-                    f'text-align:center;width:160px">'
-                    f'<img src="{img_uri}" style="max-width:144px;max-height:144px;'
+                    f'text-align:center;width:{card_w}px">'
+                    f'<img src="{img_uri}" style="max-width:{img_max}px;max-height:{img_max}px;'
                     f'border-radius:4px;display:block;margin:0 auto 6px" />'
                     f"<strong>{display_name}</strong>"
                     f"{metric_html}"

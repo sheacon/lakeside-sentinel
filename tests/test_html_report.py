@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 import numpy as np
 
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.notification.html_report import ClipReport, generate_report
+from lakeside_sentinel.notification.html_report import (
+    ClipReport,
+    _encode_cropped_png,
+    _sharpen_image,
+    generate_report,
+)
 
 
 def _make_detection(
@@ -390,3 +395,46 @@ class TestSubtitle:
         )
         assert "Motorized Vehicle Detection Report" in html
         assert "2026-03-01" in html
+
+    def test_present_mode_card_dimensions(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="present")
+        assert "width:320px" in html
+        assert "max-width:288px" in html
+
+    def test_debug_mode_card_dimensions(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report], mode="veh")
+        assert "width:160px" in html
+        assert "max-width:144px" in html
+
+
+class TestSharpenImage:
+    def test_returns_same_shape_and_dtype(self) -> None:
+        image = np.random.randint(0, 256, (50, 80, 3), dtype=np.uint8)
+        result = _sharpen_image(image)
+        assert result.shape == image.shape
+        assert result.dtype == image.dtype
+
+    def test_modifies_pixel_values(self) -> None:
+        image = np.random.randint(50, 200, (50, 80, 3), dtype=np.uint8)
+        result = _sharpen_image(image)
+        assert not np.array_equal(result, image)
+
+
+class TestEncodeCroppedPng:
+    def test_default_no_enhancement(self) -> None:
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bbox = (10.0, 10.0, 90.0, 90.0)
+        uri = _encode_cropped_png(frame, bbox, 0.0)
+        assert uri.startswith("data:image/png;base64,")
+
+    def test_enhanced_output_larger_than_normal(self) -> None:
+        frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        bbox = (10.0, 10.0, 90.0, 90.0)
+        normal = _encode_cropped_png(frame, bbox, 0.0)
+        enhanced = _encode_cropped_png(frame, bbox, 0.0, enhance=True)
+        # 2x upscaled image produces a larger base64 string
+        assert len(enhanced) > len(normal)
