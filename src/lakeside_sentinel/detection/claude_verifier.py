@@ -15,9 +15,11 @@ from lakeside_sentinel.utils.image import crop_to_bbox
 logger = logging.getLogger(__name__)
 
 _PROMPT = (
-    "Does this image show a motorcycle, motorbike, scooter, moped, or electric-assist bicycle? "
+    "Is there a motorized two-wheeled vehicle in this image — such as a motorcycle, motorbike, "
+    "scooter, moped, or e-bike? People may be riding or standing near it. "
     'Answer "yes" or "no" only. '
-    "Answer no for regular pedal bicycles, persons, or other objects."
+    'Answer "yes" only if a motorized two-wheeled vehicle is visible. '
+    'Answer "no" for everything else.'
 )
 
 
