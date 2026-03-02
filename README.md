@@ -136,7 +136,7 @@ See `.env.example` for the full list. Key variables:
 | `CAMERA_LATITUDE` | — | Camera latitude (daylight filtering) |
 | `CAMERA_LONGITUDE` | — | Camera longitude (daylight filtering) |
 | `YOLO_MODEL` | `yolo26s.pt` | YOLO model weights file |
-| `VEHICLE_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts |
+| `VEHICLE_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts and report inclusion |
 | `YOLO_BATCH_SIZE` | `16` | Frames per YOLO inference batch (prevents GPU OOM) |
 | `CROP_PADDING` | `0.2` | Padding around detected bounding box |
 | `ROI_Y_START` | `0.0` | Vertical region of interest start (fraction 0.0–1.0) |
