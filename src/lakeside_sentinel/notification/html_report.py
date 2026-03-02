@@ -102,6 +102,12 @@ def generate_report(
                         '<div style="color:#dc2626;font-size:0.8em;margin-top:4px">'
                         "&#10007; Claude rejected</div>"
                     )
+                if det.verification_response is not None:
+                    badge_html += (
+                        '<div style="color:#94a3b8;font-size:0.75em;'
+                        'font-style:italic;margin-top:2px">'
+                        f'Claude: &ldquo;{det.verification_response}&rdquo;</div>'
+                    )
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
                     f'text-align:center;width:160px">'

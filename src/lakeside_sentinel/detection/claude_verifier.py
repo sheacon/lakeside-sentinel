@@ -80,13 +80,15 @@ class ClaudeVerifier:
                     }
                 ],
             )
-            answer = response.content[0].text.strip().lower()
+            raw_text = response.content[0].text.strip()
+            answer = raw_text.lower()
             logger.info(
                 "Claude response for %s (%.0f%%): %r",
                 detection.class_name,
                 detection.confidence * 100,
                 answer,
             )
+            detection.verification_response = raw_text
             if answer.startswith("yes"):
                 detection.verification_status = "confirmed"
                 return "confirmed"

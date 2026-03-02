@@ -177,3 +177,18 @@ class TestGenerateReport:
         html = generate_report([report])
         assert "Claude verified" not in html
         assert "Claude rejected" not in html
+
+    def test_verification_response_shown_when_set(self) -> None:
+        det = _make_detection("Motorcycle", 0.9)
+        det.verification_status = "confirmed"
+        det.verification_response = "yes"
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report])
+        assert "Claude:" in html
+        assert "&ldquo;yes&rdquo;" in html
+
+    def test_verification_response_not_shown_when_none(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
+        html = generate_report([report])
+        assert "Claude:" not in html

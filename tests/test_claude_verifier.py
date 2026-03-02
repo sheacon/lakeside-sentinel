@@ -40,6 +40,7 @@ class TestVerifyDetection:
 
         assert result == "confirmed"
         assert det.verification_status == "confirmed"
+        assert det.verification_response == "yes"
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_rejected_when_claude_says_no(self, mock_anthropic_cls: MagicMock) -> None:
@@ -52,6 +53,7 @@ class TestVerifyDetection:
 
         assert result == "rejected"
         assert det.verification_status == "rejected"
+        assert det.verification_response == "no"
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_confirmed_when_response_starts_with_yes(self, mock_anthropic_cls: MagicMock) -> None:
@@ -64,6 +66,7 @@ class TestVerifyDetection:
 
         assert result == "confirmed"
         assert det.verification_status == "confirmed"
+        assert det.verification_response == "Yes, it is a motorcycle."
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_error_returns_error_and_status_none(self, mock_anthropic_cls: MagicMock) -> None:
@@ -76,6 +79,7 @@ class TestVerifyDetection:
 
         assert result == "error"
         assert det.verification_status is None
+        assert det.verification_response is None
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_sends_jpeg_image_to_api(self, mock_anthropic_cls: MagicMock) -> None:

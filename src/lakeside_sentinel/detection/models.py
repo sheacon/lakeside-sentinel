@@ -12,3 +12,4 @@ class Detection:
     confidence: float
     class_name: str
     verification_status: str | None = field(default=None)
+    verification_response: str | None = field(default=None)
