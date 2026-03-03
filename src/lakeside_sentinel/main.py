@@ -260,7 +260,7 @@ class Monitor:
         """
         t0 = time.monotonic()
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"{step_label} Analyzing frames with YOLO... ({now_str})")
+        print(f"{step_label} Analyzing frames for vehicles... ({now_str})")
         detection_count = 0
         total_frames = 0
         clip_reports: list[ClipReport] = []
