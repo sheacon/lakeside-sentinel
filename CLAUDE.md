@@ -46,6 +46,7 @@ Output files:
 - `output/report-{date}.html` — clean present report (opened in browser, emailed if `--email`)
 - `output/report-veh-{date}.html` — VEH debug report with all class detections (not opened/emailed)
 - `output/report-hsp-{date}.html` — HSP debug report with fastest track regardless of threshold (not opened/emailed)
+- `output/logs/{timestamp}.log` — timestamped log file with full logging output (created each run)
 
 ```bash
 python -m lakeside_sentinel                    # most recent daylight period
@@ -69,6 +70,12 @@ python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verific
 ```
 
 Scheduled via `run.sh` (passes `--email`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
+
+### Auto-cleanup
+
+On each run, files older than 7 days are automatically deleted from:
+- `output/logs/*.log` — log files
+- `output/video/*.mp4` — video clips
 
 ## Tuning
 

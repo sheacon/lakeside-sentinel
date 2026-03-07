@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 import time
 import webbrowser
 from datetime import date, datetime, timezone
@@ -33,39 +32,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+_CLEANUP_MAX_AGE_DAYS = 7
 _SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
 
+def _setup_file_logging() -> None:
+    """Add a FileHandler to the root logger writing to output/logs/."""
+    log_dir = Path("output") / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_path = log_dir / f"{timestamp}.log"
+    handler = logging.FileHandler(log_path)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+    logging.getLogger().addHandler(handler)
+    logger.info("Log file: %s", log_path.resolve())
+
+
+def _cleanup_old_files(directory: Path, suffix: str, max_age_days: int) -> None:
+    """Delete files in directory matching suffix that are older than max_age_days."""
+    if not directory.exists():
+        return
+    cutoff = time.time() - (max_age_days * 86400)
+    for filepath in directory.iterdir():
+        if filepath.suffix == suffix and filepath.stat().st_mtime < cutoff:
+            filepath.unlink()
+            logger.info("Cleaned up old file: %s", filepath)
+
+
 def _print_settings(settings: Settings) -> None:
-    """Print all settings, masking sensitive values."""
+    """Log all settings, masking sensitive values."""
     for name, value in settings.model_dump().items():
         if any(kw in name for kw in _SENSITIVE_KEYWORDS):
             display = "****"
         else:
             display = value
         label = name.replace("_", " ").title()
-        print(f"  {label + ':':<28} {display}")
-
-
-class _TeeWriter:
-    """Write to both stdout and a log file simultaneously."""
-
-    def __init__(self, log_path: Path) -> None:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        self._log_file = log_path.open("w")
-        self._stdout = sys.stdout
-
-    def write(self, text: str) -> int:
-        self._stdout.write(text)
-        self._log_file.write(text)
-        return len(text)
-
-    def flush(self) -> None:
-        self._stdout.flush()
-        self._log_file.flush()
-
-    def close(self) -> None:
-        self._log_file.close()
+        logger.info("  %s %s", f"{label + ':':<28}", display)
 
 
 class Monitor:
@@ -121,7 +126,7 @@ class Monitor:
         target_date: date | None,
         label_prefix: str,
     ) -> tuple[datetime, datetime, str]:
-        """Resolve daylight start/end and print the banner.
+        """Resolve daylight start/end and log the banner.
 
         Returns (start, end, label).
         """
@@ -141,13 +146,15 @@ class Monitor:
             )
             label = f"{label_prefix} — Most recent daylight"
 
-        print(f"\n{'=' * 60}")
-        print(f"  {label}")
-        print(f"  From: {start.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print(f"  To:   {end.astimezone().strftime('%d %b %Y %H:%M:%S %Z')}")
-        print()
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  %s", label)
+        logger.info("  From: %s", start.astimezone().strftime("%d %b %Y %H:%M:%S %Z"))
+        logger.info("  To:   %s", end.astimezone().strftime("%d %b %Y %H:%M:%S %Z"))
+        logger.info("")
         _print_settings(self._settings)
-        print(f"{'=' * 60}\n")
+        logger.info("=" * 60)
+        logger.info("")
 
         return start, end, label
 
@@ -160,19 +167,18 @@ class Monitor:
         """Fetch events from Nest API and filter to daylight."""
         t0 = time.monotonic()
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"{step_label} Fetching event list from Nest API... ({now_str})", flush=True)
+        logger.info("%s Fetching event list from Nest API... (%s)", step_label, now_str)
         events = self._api.get_events(start, end)
         total_events = len(events)
         events = self._filter_daylight(events)
         filtered = total_events - len(events)
-        print(f"       Found {total_events} events", end="")
         if filtered:
-            print(f" ({filtered} nighttime filtered)")
+            logger.info("       Found %d events (%d nighttime filtered)", total_events, filtered)
         else:
-            print()
+            logger.info("       Found %d events", total_events)
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
-        print()
+        logger.info("       Done in %.1fs", elapsed)
+        logger.info("")
         return events
 
     def _download_clips(
@@ -187,10 +193,11 @@ class Monitor:
         t0 = time.monotonic()
         dump_dir = Path("output") / "video"
         dump_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[clips] Saving to: {dump_dir.resolve()}\n")
+        logger.info("[clips] Saving to: %s", dump_dir.resolve())
+        logger.info("")
 
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"{step_label} Downloading clips... ({now_str})")
+        logger.info("%s Downloading clips... (%s)", step_label, now_str)
         clips: list[tuple[int, bytes]] = []
         download_errors = 0
         total_bytes = 0
@@ -207,43 +214,54 @@ class Monitor:
                 clips.append((i, mp4_bytes))
                 cached_count += 1
                 size_mb = len(mp4_bytes) / 1_000_000
-                print(
-                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB (cached)",
-                    flush=True,
+                logger.info(
+                    "  [%3d/%d] %s — %.1f MB (cached)",
+                    i + 1,
+                    len(events),
+                    label,
+                    size_mb,
                 )
                 continue
 
             try:
                 mp4_bytes = self._api.download_clip(event)
                 if not mp4_bytes:
-                    print(f"  [{i + 1:3d}/{len(events)}] {label} — empty clip (skipped)")
+                    logger.info("  [%3d/%d] %s — empty clip (skipped)", i + 1, len(events), label)
                     download_errors += 1
                     continue
                 total_bytes += len(mp4_bytes)
                 clips.append((i, mp4_bytes))
                 size_mb = len(mp4_bytes) / 1_000_000
                 dur = event.duration.total_seconds()
-                print(
-                    f"  [{i + 1:3d}/{len(events)}] {label} — {size_mb:.1f} MB ({dur:.0f}s)",
-                    flush=True,
+                logger.info(
+                    "  [%3d/%d] %s — %.1f MB (%.0fs)",
+                    i + 1,
+                    len(events),
+                    label,
+                    size_mb,
+                    dur,
                 )
 
                 (dump_dir / filename).write_bytes(mp4_bytes)
             except Exception as e:
-                print(f"  [{i + 1:3d}/{len(events)}] {label} — ERROR: {e}")
+                logger.info("  [%3d/%d] %s — ERROR: %s", i + 1, len(events), label, e)
                 download_errors += 1
 
         total_mb = total_bytes / 1_000_000
         downloaded = len(clips) - cached_count
-        print(
-            f"\n       {downloaded} downloaded, {cached_count} cached"
-            f" — {len(clips)}/{len(events)} clips ({total_mb:.1f} MB total)"
+        logger.info(
+            "       %d downloaded, %d cached — %d/%d clips (%.1f MB total)",
+            downloaded,
+            cached_count,
+            len(clips),
+            len(events),
+            total_mb,
         )
         if download_errors:
-            print(f"       {download_errors} download errors")
+            logger.info("       %d download errors", download_errors)
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
-        print()
+        logger.info("       Done in %.1fs", elapsed)
+        logger.info("")
 
         return clips, total_mb
 
@@ -260,7 +278,7 @@ class Monitor:
         """
         t0 = time.monotonic()
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"{step_label} Analyzing frames for vehicles... ({now_str})")
+        logger.info("%s Analyzing frames for vehicles... (%s)", step_label, now_str)
         detection_count = 0
         total_frames = 0
         clip_reports: list[ClipReport] = []
@@ -280,7 +298,7 @@ class Monitor:
             )
             total_frames += len(frames)
             if not frames:
-                print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
+                logger.info("  [%3d/%d] %s — no frames extracted", idx + 1, len(clips), label)
                 mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                 empty_report = ClipReport(
                     event_time=event.start_time,
@@ -320,31 +338,37 @@ class Monitor:
             )
 
             if detection is None:
-                print(
-                    f"  [{idx + 1:3d}/{len(clips)}] {label}"
-                    f" — {len(frames):2d} frames — no detection",
-                    flush=True,
+                logger.info(
+                    "  [%3d/%d] %s — %2d frames — no detection",
+                    idx + 1,
+                    len(clips),
+                    label,
+                    len(frames),
                 )
                 if class_best:
                     breakdown = "  ".join(
                         f"{name}: {det.confidence:.0%}" for name, det in sorted(class_best.items())
                     )
-                    print(f"            {breakdown}")
+                    logger.info("            %s", breakdown)
                 continue
 
             detection_count += 1
-            print(
-                f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
-                f"{detection.class_name.upper()} (confidence: {detection.confidence:.0%})",
-                flush=True,
+            logger.info(
+                "  [%3d/%d] %s — %2d frames — %s (confidence: %s)",
+                idx + 1,
+                len(clips),
+                label,
+                len(frames),
+                detection.class_name.upper(),
+                f"{detection.confidence:.0%}",
             )
             breakdown = "  ".join(
                 f"{name}: {det.confidence:.0%}" for name, det in sorted(class_best.items())
             )
-            print(f"            {breakdown}")
+            logger.info("            %s", breakdown)
 
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
+        logger.info("       Done in %.1fs", elapsed)
 
         return clip_reports, detection_count, total_frames, debug_clip_reports
 
@@ -362,7 +386,12 @@ class Monitor:
         t0 = time.monotonic()
         fps = self._settings.hsp_fps_sample
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"{step_label} Analyzing frames for high-speed persons (fps={fps})... ({now_str})")
+        logger.info(
+            "%s Analyzing frames for high-speed persons (fps=%d)... (%s)",
+            step_label,
+            fps,
+            now_str,
+        )
         detection_count = 0
         total_frames = 0
         clip_reports: list[ClipReport] = []
@@ -382,7 +411,7 @@ class Monitor:
             )
             total_frames += len(frames)
             if not frames:
-                print(f"  [{idx + 1:3d}/{len(clips)}] {label} — no frames extracted")
+                logger.info("  [%3d/%d] %s — no frames extracted", idx + 1, len(clips), label)
                 mp4_fn = "video/" + local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
                 empty_report = ClipReport(
                     event_time=event.start_time,
@@ -454,22 +483,29 @@ class Monitor:
                 track_info = f" — {len(tracks)} tracks (max disp: {max_disp:.1f} px/sec)"
 
             if detection is None:
-                print(
-                    f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames"
-                    f" — no HSP{track_info}",
-                    flush=True,
+                logger.info(
+                    "  [%3d/%d] %s — %2d frames — no HSP%s",
+                    idx + 1,
+                    len(clips),
+                    label,
+                    len(frames),
+                    track_info,
                 )
                 continue
 
             detection_count += 1
-            print(
-                f"  [{idx + 1:3d}/{len(clips)}] {label} — {len(frames):2d} frames — "
-                f"HSP (confidence: {detection.confidence:.0%}){track_info}",
-                flush=True,
+            logger.info(
+                "  [%3d/%d] %s — %2d frames — HSP (confidence: %s)%s",
+                idx + 1,
+                len(clips),
+                label,
+                len(frames),
+                f"{detection.confidence:.0%}",
+                track_info,
             )
 
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
+        logger.info("       Done in %.1fs", elapsed)
 
         return clip_reports, detection_count, total_frames, debug_clip_reports
 
@@ -485,7 +521,8 @@ class Monitor:
         """
         t0 = time.monotonic()
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"\n{step_label} Verifying detections with Claude Vision... ({now_str})")
+        logger.info("")
+        logger.info("%s Verifying detections with Claude Vision... (%s)", step_label, now_str)
         verifier = ClaudeVerifier(
             api_key=self._settings.anthropic_api_key,
             model=self._settings.claude_vision_model,
@@ -521,9 +558,9 @@ class Monitor:
                 best_detection=new_best,
                 class_detections=new_class_dets,
             )
-        print(f"       {confirmed_count} confirmed, {rejected_count} rejected")
+        logger.info("       %d confirmed, %d rejected", confirmed_count, rejected_count)
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
+        logger.info("       Done in %.1fs", elapsed)
 
         detection_count = sum(1 for r in clip_reports if r.best_detection is not None)
         return clip_reports, detection_count
@@ -541,7 +578,8 @@ class Monitor:
         """Generate HTML report and optionally send email."""
         t0 = time.monotonic()
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"\n{step_label} Generating HTML report... ({now_str})")
+        logger.info("")
+        logger.info("%s Generating HTML report... (%s)", step_label, now_str)
         settings_dict = self._settings.model_dump() if mode != "present" else None
         html, _ = generate_report(
             clip_reports,
@@ -560,7 +598,7 @@ class Monitor:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
-        print(f"       Report: {report_path.resolve()}")
+        logger.info("       Report: %s", report_path.resolve())
         webbrowser.open(report_path.resolve().as_uri())
 
         email_id: str | None = None
@@ -579,12 +617,12 @@ class Monitor:
                 email_html, f"{title} - {date_str}", attachments=email_attachments
             )
             if email_id:
-                print(f"       Email sent ({email_id})")
+                logger.info("       Email sent (%s)", email_id)
             else:
-                print("       Email FAILED")
+                logger.info("       Email FAILED")
 
         elapsed = time.monotonic() - t0
-        print(f"       Done in {elapsed:.1f}s")
+        logger.info("       Done in %.1fs", elapsed)
 
         return report_path, email_id
 
@@ -662,65 +700,59 @@ class Monitor:
         else:
             date_str = start.astimezone().strftime("%Y-%m-%d")
 
-        log_path = Path("output") / f"report-{date_str}.log"
-        tee = _TeeWriter(log_path)
-        sys.stdout = tee  # type: ignore[assignment]
-        try:
-            events = self._fetch_events(start, end, step_label="[1/5]")
-            if not events:
-                print("No events to process.")
-                return
+        events = self._fetch_events(start, end, step_label="[1/5]")
+        if not events:
+            logger.info("No events to process.")
+            return
 
-            clips, total_mb = self._download_clips(events, step_label="[2/5]")
+        clips, total_mb = self._download_clips(events, step_label="[2/5]")
 
-            veh_reports, veh_count, veh_frames, veh_debug_reports = self._detect_veh(
-                clips, events, step_label="[3/5]"
-            )
-            hsp_reports, hsp_count, hsp_frames, hsp_debug_reports = self._detect_hsp(
-                clips, events, step_label="[3/5]"
-            )
+        veh_reports, veh_count, veh_frames, veh_debug_reports = self._detect_veh(
+            clips, events, step_label="[3/5]"
+        )
+        hsp_reports, hsp_count, hsp_frames, hsp_debug_reports = self._detect_hsp(
+            clips, events, step_label="[3/5]"
+        )
 
-            merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
+        merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
 
-            merged_reports, detection_count = self._verify_with_claude(
-                merged_reports, False, step_label="[4/5]"
-            )
+        merged_reports, detection_count = self._verify_with_claude(
+            merged_reports, False, step_label="[4/5]"
+        )
 
-            report_path, email_id = self._generate_and_send_report(
-                merged_reports,
-                date_str,
-                "present",
-                "Motorized Vehicle Detection Report",
-                send_email,
-                subtitle=date_str,
-                step_label="[5/5]",
-            )
+        report_path, email_id = self._generate_and_send_report(
+            merged_reports,
+            date_str,
+            "present",
+            "Motorized Vehicle Detection Report",
+            send_email,
+            subtitle=date_str,
+            step_label="[5/5]",
+        )
 
-            veh_debug_path = self._write_debug_report(
-                veh_debug_reports, date_str, "veh", "VEH Detection Report"
-            )
-            hsp_debug_path = self._write_debug_report(
-                hsp_debug_reports, date_str, "hsp", "HSP Detection Report"
-            )
+        veh_debug_path = self._write_debug_report(
+            veh_debug_reports, date_str, "veh", "VEH Detection Report"
+        )
+        hsp_debug_path = self._write_debug_report(
+            hsp_debug_reports, date_str, "hsp", "HSP Detection Report"
+        )
 
-            print(f"\n{'=' * 60}")
-            print("  DETECTION COMPLETE")
-            print(f"  Events:     {len(events)}")
-            print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
-            print(f"  Frames:     {veh_frames} VEH + {hsp_frames} HSP analyzed")
-            print(f"  Detections: {detection_count}")
-            print(f"  Report:     {report_path.resolve()}")
-            print(f"  VEH debug:  {veh_debug_path.resolve()}")
-            print(f"  HSP debug:  {hsp_debug_path.resolve()}")
-            if send_email:
-                print(f"  Email:      {'sent' if email_id else 'failed'}")
-            dump_dir = Path("output") / "video"
-            print(f"  Clips:      {dump_dir.resolve()}")
-            print(f"{'=' * 60}\n")
-        finally:
-            sys.stdout = tee._stdout
-            tee.close()
-            logger.info("Log written to %s", log_path)
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  DETECTION COMPLETE")
+        logger.info("  Events:     %d", len(events))
+        logger.info("  Downloaded: %d clips (%.1f MB)", len(clips), total_mb)
+        logger.info("  Frames:     %d VEH + %d HSP analyzed", veh_frames, hsp_frames)
+        logger.info("  Detections: %d", detection_count)
+        logger.info("  Report:     %s", report_path.resolve())
+        logger.info("  VEH debug:  %s", veh_debug_path.resolve())
+        logger.info("  HSP debug:  %s", hsp_debug_path.resolve())
+        if send_email:
+            logger.info("  Email:      %s", "sent" if email_id else "failed")
+        dump_dir = Path("output") / "video"
+        logger.info("  Clips:      %s", dump_dir.resolve())
+        logger.info("=" * 60)
+        logger.info("")
 
     def run_debug_veh(
         self,
@@ -737,51 +769,45 @@ class Monitor:
         else:
             date_str = start.astimezone().strftime("%Y-%m-%d")
 
-        log_path = Path("output") / f"report-veh-{date_str}.log"
-        tee = _TeeWriter(log_path)
-        sys.stdout = tee  # type: ignore[assignment]
-        try:
-            total = 5 if use_claude else 4
-            events = self._fetch_events(start, end, step_label=f"[1/{total}]")
-            if not events:
-                print("No events to process.")
-                return
+        total = 5 if use_claude else 4
+        events = self._fetch_events(start, end, step_label=f"[1/{total}]")
+        if not events:
+            logger.info("No events to process.")
+            return
 
-            clips, total_mb = self._download_clips(events, step_label=f"[2/{total}]")
-            clip_reports, detection_count, total_frames, _ = self._detect_veh(
-                clips, events, step_label=f"[3/{total}]"
+        clips, total_mb = self._download_clips(events, step_label=f"[2/{total}]")
+        clip_reports, detection_count, total_frames, _ = self._detect_veh(
+            clips, events, step_label=f"[3/{total}]"
+        )
+
+        if use_claude:
+            clip_reports, detection_count = self._verify_with_claude(
+                clip_reports, claude_keep_rejected, step_label=f"[4/{total}]"
             )
 
-            if use_claude:
-                clip_reports, detection_count = self._verify_with_claude(
-                    clip_reports, claude_keep_rejected, step_label=f"[4/{total}]"
-                )
+        report_path, email_id = self._generate_and_send_report(
+            clip_reports,
+            date_str,
+            "veh",
+            "VEH Detection Report",
+            send_email,
+            step_label=f"[{total}/{total}]",
+        )
 
-            report_path, email_id = self._generate_and_send_report(
-                clip_reports,
-                date_str,
-                "veh",
-                "VEH Detection Report",
-                send_email,
-                step_label=f"[{total}/{total}]",
-            )
-
-            print(f"\n{'=' * 60}")
-            print("  VEH DETECTION COMPLETE")
-            print(f"  Events:     {len(events)}")
-            print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
-            print(f"  Frames:     {total_frames} analyzed")
-            print(f"  Detections: {detection_count}")
-            print(f"  Report:     {report_path.resolve()}")
-            if send_email:
-                print(f"  Email:      {'sent' if email_id else 'failed'}")
-            dump_dir = Path("output") / "video"
-            print(f"  Clips:      {dump_dir.resolve()}")
-            print(f"{'=' * 60}\n")
-        finally:
-            sys.stdout = tee._stdout
-            tee.close()
-            logger.info("Log written to %s", log_path)
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  VEH DETECTION COMPLETE")
+        logger.info("  Events:     %d", len(events))
+        logger.info("  Downloaded: %d clips (%.1f MB)", len(clips), total_mb)
+        logger.info("  Frames:     %d analyzed", total_frames)
+        logger.info("  Detections: %d", detection_count)
+        logger.info("  Report:     %s", report_path.resolve())
+        if send_email:
+            logger.info("  Email:      %s", "sent" if email_id else "failed")
+        dump_dir = Path("output") / "video"
+        logger.info("  Clips:      %s", dump_dir.resolve())
+        logger.info("=" * 60)
+        logger.info("")
 
     def run_debug_hsp(
         self,
@@ -798,57 +824,55 @@ class Monitor:
         else:
             date_str = start.astimezone().strftime("%Y-%m-%d")
 
-        log_path = Path("output") / f"report-hsp-{date_str}.log"
-        tee = _TeeWriter(log_path)
-        sys.stdout = tee  # type: ignore[assignment]
-        try:
-            total = 5 if use_claude else 4
-            events = self._fetch_events(start, end, step_label=f"[1/{total}]")
-            if not events:
-                print("No events to process.")
-                return
+        total = 5 if use_claude else 4
+        events = self._fetch_events(start, end, step_label=f"[1/{total}]")
+        if not events:
+            logger.info("No events to process.")
+            return
 
-            clips, total_mb = self._download_clips(events, step_label=f"[2/{total}]")
-            clip_reports, detection_count, total_frames, _ = self._detect_hsp(
-                clips, events, step_label=f"[3/{total}]"
+        clips, total_mb = self._download_clips(events, step_label=f"[2/{total}]")
+        clip_reports, detection_count, total_frames, _ = self._detect_hsp(
+            clips, events, step_label=f"[3/{total}]"
+        )
+
+        if use_claude:
+            clip_reports, detection_count = self._verify_with_claude(
+                clip_reports, claude_keep_rejected, step_label=f"[4/{total}]"
             )
 
-            if use_claude:
-                clip_reports, detection_count = self._verify_with_claude(
-                    clip_reports, claude_keep_rejected, step_label=f"[4/{total}]"
-                )
+        fps = self._settings.hsp_fps_sample
+        report_path, email_id = self._generate_and_send_report(
+            clip_reports,
+            date_str,
+            "hsp",
+            "HSP Detection Report",
+            send_email,
+            step_label=f"[{total}/{total}]",
+        )
 
-            fps = self._settings.hsp_fps_sample
-            report_path, email_id = self._generate_and_send_report(
-                clip_reports,
-                date_str,
-                "hsp",
-                "HSP Detection Report",
-                send_email,
-                step_label=f"[{total}/{total}]",
-            )
-
-            print(f"\n{'=' * 60}")
-            print("  HSP DETECTION COMPLETE")
-            print(f"  Events:     {len(events)}")
-            print(f"  Downloaded: {len(clips)} clips ({total_mb:.1f} MB)")
-            print(f"  Frames:     {total_frames} analyzed (fps={fps})")
-            print(f"  Detections: {detection_count}")
-            print(f"  Report:     {report_path.resolve()}")
-            if send_email:
-                print(f"  Email:      {'sent' if email_id else 'failed'}")
-            dump_dir = Path("output") / "video"
-            print(f"  Clips:      {dump_dir.resolve()}")
-            print(f"{'=' * 60}\n")
-        finally:
-            sys.stdout = tee._stdout
-            tee.close()
-            logger.info("Log written to %s", log_path)
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  HSP DETECTION COMPLETE")
+        logger.info("  Events:     %d", len(events))
+        logger.info("  Downloaded: %d clips (%.1f MB)", len(clips), total_mb)
+        logger.info("  Frames:     %d analyzed (fps=%d)", total_frames, fps)
+        logger.info("  Detections: %d", detection_count)
+        logger.info("  Report:     %s", report_path.resolve())
+        if send_email:
+            logger.info("  Email:      %s", "sent" if email_id else "failed")
+        dump_dir = Path("output") / "video"
+        logger.info("  Clips:      %s", dump_dir.resolve())
+        logger.info("=" * 60)
+        logger.info("")
 
 
 def main() -> None:
     args = parse_args()
     settings = Settings()  # type: ignore[call-arg]
+
+    _setup_file_logging()
+    _cleanup_old_files(Path("output") / "logs", ".log", _CLEANUP_MAX_AGE_DAYS)
+    _cleanup_old_files(Path("output") / "video", ".mp4", _CLEANUP_MAX_AGE_DAYS)
 
     target_date: date | None = None
     if args.date:

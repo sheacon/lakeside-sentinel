@@ -1,3 +1,5 @@
+import logging
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -8,7 +10,7 @@ import pytest
 from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.config import Settings
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.main import Monitor, _print_settings, _TeeWriter
+from lakeside_sentinel.main import Monitor, _cleanup_old_files, _print_settings, _setup_file_logging
 
 
 def _make_event(hour: int = 12) -> CameraEvent:
@@ -34,31 +36,31 @@ def mock_settings() -> Settings:
 
 class TestPrintSettings:
     def test_prints_all_settings_fields(
-        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+        self, mock_settings: Settings, caplog: pytest.LogCaptureFixture
     ) -> None:
-        _print_settings(mock_settings)
-        output = capsys.readouterr().out
+        with caplog.at_level(logging.INFO):
+            _print_settings(mock_settings)
         for field_name in Settings.model_fields:
             label = field_name.replace("_", " ").title()
-            assert label in output
+            assert label in caplog.text
 
     def test_masks_sensitive_values(
-        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+        self, mock_settings: Settings, caplog: pytest.LogCaptureFixture
     ) -> None:
-        _print_settings(mock_settings)
-        output = capsys.readouterr().out
-        assert mock_settings.google_master_token not in output
-        assert mock_settings.resend_api_key not in output
-        assert "****" in output
+        with caplog.at_level(logging.INFO):
+            _print_settings(mock_settings)
+        assert mock_settings.google_master_token not in caplog.text
+        assert mock_settings.resend_api_key not in caplog.text
+        assert "****" in caplog.text
 
     def test_shows_non_sensitive_values(
-        self, mock_settings: Settings, capsys: pytest.CaptureFixture[str]
+        self, mock_settings: Settings, caplog: pytest.LogCaptureFixture
     ) -> None:
-        _print_settings(mock_settings)
-        output = capsys.readouterr().out
-        assert str(mock_settings.yolo_model) in output
-        assert str(mock_settings.veh_fps_sample) in output
-        assert mock_settings.alert_email_to in output
+        with caplog.at_level(logging.INFO):
+            _print_settings(mock_settings)
+        assert str(mock_settings.yolo_model) in caplog.text
+        assert str(mock_settings.veh_fps_sample) in caplog.text
+        assert mock_settings.alert_email_to in caplog.text
 
 
 class TestRunCache:
@@ -990,7 +992,7 @@ class TestStepLabels:
         mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.chdir(tmp_path)
         mock_settings.anthropic_api_key = "test-key"
@@ -1010,15 +1012,15 @@ class TestStepLabels:
         mock_verifier_cls.return_value.verify_detections.return_value = {}
 
         monitor = Monitor(mock_settings)
-        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+        with caplog.at_level(logging.INFO):
+            monitor.run_present(target_date=datetime(2026, 2, 28).date())
 
-        output = capsys.readouterr().out
-        assert "[1/5]" in output
-        assert "[2/5]" in output
-        assert "[3/5]" in output
-        assert "[4/5]" in output
-        assert "[5/5]" in output
-        assert "[3.5/4]" not in output
+        assert "[1/5]" in caplog.text
+        assert "[2/5]" in caplog.text
+        assert "[3/5]" in caplog.text
+        assert "[4/5]" in caplog.text
+        assert "[5/5]" in caplog.text
+        assert "[3.5/4]" not in caplog.text
 
     @patch("lakeside_sentinel.main.webbrowser.open")
     @patch("lakeside_sentinel.main.crop_to_roi")
@@ -1043,7 +1045,7 @@ class TestStepLabels:
         mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.chdir(tmp_path)
 
@@ -1059,14 +1061,14 @@ class TestStepLabels:
         mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
 
         monitor = Monitor(mock_settings)
-        monitor.run_debug_veh()
+        with caplog.at_level(logging.INFO):
+            monitor.run_debug_veh()
 
-        output = capsys.readouterr().out
-        assert "[1/4]" in output
-        assert "[2/4]" in output
-        assert "[3/4]" in output
-        assert "[4/4]" in output
-        assert "[3.5/4]" not in output
+        assert "[1/4]" in caplog.text
+        assert "[2/4]" in caplog.text
+        assert "[3/4]" in caplog.text
+        assert "[4/4]" in caplog.text
+        assert "[3.5/4]" not in caplog.text
 
 
 class TestTimestampsAndDuration:
@@ -1093,7 +1095,7 @@ class TestTimestampsAndDuration:
         mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         monkeypatch.chdir(tmp_path)
 
@@ -1109,120 +1111,72 @@ class TestTimestampsAndDuration:
         mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
 
         monitor = Monitor(mock_settings)
-        monitor.run_debug_veh()
+        with caplog.at_level(logging.INFO):
+            monitor.run_debug_veh()
 
-        output = capsys.readouterr().out
-        assert "Done in" in output
+        assert "Done in" in caplog.text
 
 
-class TestLogFile:
-    @patch("lakeside_sentinel.main.webbrowser.open")
-    @patch("lakeside_sentinel.main.crop_to_roi")
-    @patch("lakeside_sentinel.main.extract_frames")
-    @patch("lakeside_sentinel.main.NestCameraAPI")
-    @patch("lakeside_sentinel.main.NestAuth")
-    @patch("lakeside_sentinel.main.HSPDetector")
-    @patch("lakeside_sentinel.main.VEHDetector")
-    @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
-    def test_log_file_created_for_debug_veh(
+class TestFileLogging:
+    def test_setup_file_logging_creates_log_file(
         self,
-        mock_generate_report: MagicMock,
-        mock_email_cls: MagicMock,
-        mock_veh_cls: MagicMock,
-        mock_hsp_cls: MagicMock,
-        mock_auth_cls: MagicMock,
-        mock_api_cls: MagicMock,
-        mock_extract_frames: MagicMock,
-        mock_crop_to_roi: MagicMock,
-        mock_webbrowser_open: MagicMock,
-        mock_settings: Settings,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.chdir(tmp_path)
+        root_logger = logging.getLogger()
+        original_handlers = root_logger.handlers[:]
+        try:
+            _setup_file_logging()
+            log_dir = tmp_path / "output" / "logs"
+            assert log_dir.exists()
+            log_files = list(log_dir.glob("*.log"))
+            assert len(log_files) == 1
 
-        event = _make_event(hour=12)
-        mock_api = mock_api_cls.return_value
-        mock_api.get_events.return_value = [event]
-        mock_api.download_clip.return_value = b"video_data"
+            # Verify the handler writes content
+            test_logger = logging.getLogger("test_file_logging")
+            test_logger.setLevel(logging.INFO)
+            root_logger.setLevel(logging.INFO)
+            test_logger.info("test message")
+            # Flush all handlers to ensure content is written
+            for handler in root_logger.handlers:
+                handler.flush()
+            content = log_files[0].read_text()
+            assert "test message" in content
+        finally:
+            # Clean up added handlers
+            for handler in root_logger.handlers[:]:
+                if handler not in original_handlers:
+                    root_logger.removeHandler(handler)
+                    handler.close()
 
-        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
-        mock_extract_frames.return_value = [dummy_frame]
-        mock_crop_to_roi.return_value = [dummy_frame]
+    def test_cleanup_old_files_deletes_old(self, tmp_path: Path) -> None:
+        old_file = tmp_path / "old.log"
+        old_file.write_text("old")
+        import os
 
-        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
+        old_mtime = time.time() - (8 * 86400)
+        os.utime(old_file, (old_mtime, old_mtime))
 
-        monitor = Monitor(mock_settings)
-        monitor.run_debug_veh(target_date=datetime(2026, 2, 28).date())
+        new_file = tmp_path / "new.log"
+        new_file.write_text("new")
 
-        log_path = tmp_path / "output" / "report-veh-2026-02-28.log"
-        assert log_path.exists()
-        content = log_path.read_text()
-        assert "[1/4]" in content
-        assert "Done in" in content
+        _cleanup_old_files(tmp_path, ".log", 7)
 
-    @patch("lakeside_sentinel.main.webbrowser.open")
-    @patch("lakeside_sentinel.main.ClaudeVerifier")
-    @patch("lakeside_sentinel.main.crop_to_roi")
-    @patch("lakeside_sentinel.main.extract_frames")
-    @patch("lakeside_sentinel.main.NestCameraAPI")
-    @patch("lakeside_sentinel.main.NestAuth")
-    @patch("lakeside_sentinel.main.HSPDetector")
-    @patch("lakeside_sentinel.main.VEHDetector")
-    @patch("lakeside_sentinel.main.EmailSender")
-    @patch("lakeside_sentinel.main.generate_report", return_value=("<html></html>", []))
-    def test_log_file_created_for_present(
-        self,
-        mock_generate_report: MagicMock,
-        mock_email_cls: MagicMock,
-        mock_veh_cls: MagicMock,
-        mock_hsp_cls: MagicMock,
-        mock_auth_cls: MagicMock,
-        mock_api_cls: MagicMock,
-        mock_extract_frames: MagicMock,
-        mock_crop_to_roi: MagicMock,
-        mock_verifier_cls: MagicMock,
-        mock_webbrowser_open: MagicMock,
-        mock_settings: Settings,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.chdir(tmp_path)
-        mock_settings.anthropic_api_key = "test-key"
+        assert not old_file.exists()
+        assert new_file.exists()
 
-        event = _make_event(hour=12)
-        mock_api = mock_api_cls.return_value
-        mock_api.get_events.return_value = [event]
-        mock_api.download_clip.return_value = b"video_data"
+    def test_cleanup_old_files_ignores_wrong_suffix(self, tmp_path: Path) -> None:
+        old_file = tmp_path / "old.txt"
+        old_file.write_text("old")
+        import os
 
-        dummy_frame = np.zeros((100, 100, 3), dtype=np.uint8)
-        mock_extract_frames.return_value = [dummy_frame]
-        mock_crop_to_roi.return_value = [dummy_frame]
+        old_mtime = time.time() - (8 * 86400)
+        os.utime(old_file, (old_mtime, old_mtime))
 
-        mock_veh_cls.return_value.detect_detailed.return_value = (None, {})
-        mock_hsp_cls.return_value.detect_all_tracks.return_value = []
-        mock_hsp_cls.return_value.detect.return_value = None
-        mock_verifier_cls.return_value.verify_detections.return_value = {}
+        _cleanup_old_files(tmp_path, ".log", 7)
 
-        monitor = Monitor(mock_settings)
-        monitor.run_present(target_date=datetime(2026, 2, 28).date())
+        assert old_file.exists()
 
-        log_path = tmp_path / "output" / "report-2026-02-28.log"
-        assert log_path.exists()
-        content = log_path.read_text()
-        assert "[1/5]" in content
-
-    def test_tee_writer_writes_to_both(self, tmp_path: Path) -> None:
-        log_path = tmp_path / "test.log"
-        tee = _TeeWriter(log_path)
-        import io
-
-        fake_stdout = io.StringIO()
-        tee._stdout = fake_stdout
-        tee.write("hello world")
-        tee.flush()
-        tee.close()
-
-        assert fake_stdout.getvalue() == "hello world"
-        assert log_path.read_text() == "hello world"
+    def test_cleanup_old_files_nonexistent_directory(self) -> None:
+        _cleanup_old_files(Path("/nonexistent/directory"), ".log", 7)
