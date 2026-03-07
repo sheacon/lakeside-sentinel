@@ -950,6 +950,7 @@ class Monitor:
 
         all_present_htmls: list[str] = []
         all_attachments: list[dict[str, str | bytes]] = []
+        cid_offset = 0
 
         for date_str, day_info in sorted(days_data.items()):
             selected_ids = set(day_info.get("selected", []))
@@ -1016,9 +1017,11 @@ class Monitor:
                 subtitle=date_str,
                 for_email=True,
                 total_clips=stored_total_clips,
+                cid_start=cid_offset,
             )
             all_present_htmls.append(email_html)
             all_attachments.extend(email_attachments)
+            cid_offset += len(email_attachments)
 
             # Clean up staging
             cleanup_staging(staging_dir)

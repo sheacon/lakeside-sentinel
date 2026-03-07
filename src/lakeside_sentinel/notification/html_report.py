@@ -104,6 +104,7 @@ def generate_report(
     subtitle: str | None = None,
     for_email: bool = False,
     total_clips: int | None = None,
+    cid_start: int = 0,
 ) -> tuple[str, list[dict[str, str | bytes]]]:
     """Generate a self-contained HTML report.
 
@@ -156,7 +157,7 @@ def generate_report(
 
     sections: list[str] = []
     attachments: list[dict[str, str | bytes]] = []
-    cid_counter = 0
+    cid_counter = cid_start
     for report in filtered_reports:
         local_time = report.event_time.astimezone()
         time_str = local_time.strftime("%m-%d %H:%M:%S")

@@ -531,3 +531,21 @@ class TestEmailReport:
         assert "detection-1" in cids
         assert 'src="cid:detection-0"' in html
         assert 'src="cid:detection-1"' in html
+
+    def test_cid_start_produces_unique_cids_across_calls(self) -> None:
+        det1 = _make_detection("Motorcycle", 0.9)
+        report1 = _make_clip_report(hour=10, best=det1, class_detections={"Motorcycle": det1})
+        html1, att1 = generate_report([report1], for_email=True, cid_start=0)
+
+        det2 = _make_detection("Bicycle", 0.7)
+        report2 = _make_clip_report(hour=11, best=det2, class_detections={"Bicycle": det2})
+        html2, att2 = generate_report([report2], for_email=True, cid_start=len(att1))
+
+        # Day 1 uses detection-0, Day 2 uses detection-1
+        assert att1[0]["content_id"] == "detection-0"
+        assert att2[0]["content_id"] == "detection-1"
+        assert 'src="cid:detection-0"' in html1
+        assert 'src="cid:detection-1"' in html2
+        # No overlap
+        all_cids = {a["content_id"] for a in att1 + att2}
+        assert len(all_cids) == len(att1) + len(att2)
