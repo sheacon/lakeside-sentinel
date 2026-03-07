@@ -54,6 +54,7 @@ def stage_detections(
     veh_debug_reports: list[ClipReport],
     hsp_debug_reports: list[ClipReport],
     crop_padding: float,
+    total_clips: int | None = None,
 ) -> Path:
     """Stage detection data to disk for the review web app.
 
@@ -65,6 +66,7 @@ def stage_detections(
         veh_debug_reports: All VEH detections (debug).
         hsp_debug_reports: All HSP detections (debug).
         crop_padding: Padding fraction for cropping.
+        total_clips: Total number of video clips analysed (for report stats).
 
     Returns:
         Path to the staging directory.
@@ -170,11 +172,13 @@ def stage_detections(
             )
             added.add(key)
 
-    staging_data = {
+    staging_data: dict[str, object] = {
         "date_str": date_str,
         "crop_padding": crop_padding,
         "detections": detections_json,
     }
+    if total_clips is not None:
+        staging_data["total_clips"] = total_clips
 
     json_path = staging_dir / "staging.json"
     json_path.write_text(json.dumps(staging_data, indent=2))

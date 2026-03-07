@@ -235,6 +235,22 @@ class TestGenerateReport:
         html, _ = generate_report([report], mode="hsp")
         assert "320 px/sec" in html
 
+    def test_total_clips_override(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
+        html, _ = generate_report(reports, total_clips=47)
+        assert "47 clips analysed" in html
+        assert "1 with detections" in html
+
+    def test_total_clips_none_falls_back_to_len(self) -> None:
+        det = _make_detection("Motorcycle", 0.8)
+        reports = [
+            _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det}),
+            _make_clip_report(hour=11, best=None),
+        ]
+        html, _ = generate_report(reports, total_clips=None)
+        assert "2 clips analysed" in html
+
 
 class TestPresentModeReport:
     def test_sorted_chronologically(self) -> None:
@@ -248,8 +264,8 @@ class TestPresentModeReport:
         # Times display in local time; get the expected local time strings
         early_time = datetime(2026, 2, 28, 10, 0, 0, tzinfo=timezone.utc)
         late_time = datetime(2026, 2, 28, 14, 0, 0, tzinfo=timezone.utc)
-        early_str = early_time.astimezone().strftime("%H:%M:%S")
-        late_str = late_time.astimezone().strftime("%H:%M:%S")
+        early_str = early_time.astimezone().strftime("%m-%d %H:%M:%S")
+        late_str = late_time.astimezone().strftime("%m-%d %H:%M:%S")
         pos_early = html.index(early_str)
         pos_late = html.index(late_str)
         assert pos_early < pos_late

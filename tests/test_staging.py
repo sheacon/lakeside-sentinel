@@ -98,6 +98,44 @@ class TestStagingRoundtrip:
         assert d["frame_width"] == 200
 
 
+class TestTotalClips:
+    def test_total_clips_stored_in_staging(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        det = _make_detection(verification_status="confirmed")
+        merged = [_make_clip_report({"Motorcycle": det})]
+        staging_dir = stage_detections("2026-03-06", merged, [], [], 0.2, total_clips=47)
+
+        data = load_staged_detections(staging_dir)
+        assert data["total_clips"] == 47
+
+    def test_total_clips_none_omits_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        det = _make_detection(verification_status="confirmed")
+        merged = [_make_clip_report({"Motorcycle": det})]
+        staging_dir = stage_detections("2026-03-06", merged, [], [], 0.2, total_clips=None)
+
+        data = load_staged_detections(staging_dir)
+        assert "total_clips" not in data
+
+    def test_old_staging_without_total_clips(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        det = _make_detection(verification_status="confirmed")
+        merged = [_make_clip_report({"Motorcycle": det})]
+        staging_dir = stage_detections("2026-03-06", merged, [], [], 0.2)
+
+        data = load_staged_detections(staging_dir)
+        assert data.get("total_clips") is None
+
+
 class TestSectionAssignment:
     def test_confirmed_detection_in_confirmed_section(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

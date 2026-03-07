@@ -23,6 +23,78 @@ logger = logging.getLogger(__name__)
 
 _shutdown_queue: Queue[dict[str, object]] = Queue()
 
+_VEH_CLASS_PRIORITY = {"Motorcycle": 0, "Bicycle": 1}
+
+
+def _sort_detections(detections: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Sort detections within each section for display.
+
+    - confirmed: first, original order
+    - veh_debug: by class priority (Motorcycle > Bicycle), then confidence desc
+    - hsp_debug: by speed desc
+    """
+
+    def _sort_key(det: dict[str, object]) -> tuple:
+        section = det["section"]
+        if section == "veh_debug":
+            return (1, _VEH_CLASS_PRIORITY.get(det["class_name"], 2), -(det["confidence"] or 0))
+        elif section == "hsp_debug":
+            return (2, -(det["speed"] or 0))
+        else:  # confirmed
+            return (0,)
+
+    return sorted(detections, key=_sort_key)
+
+
+def _video_review_score(detections: list[dict[str, object]]) -> float:
+    """Compute a review-worthiness score for a video's detections.
+
+    Higher scores mean more likely to be interesting. Used for ranking
+    video groups in the review UI.
+    """
+    max_score = 0.0
+    for det in detections:
+        if det["source"] == "veh":
+            class_boost = {"Motorcycle": 1.0, "Bicycle": 0.5}.get(det["class_name"], 0.0)
+            score = class_boost + (det["confidence"] or 0.0)
+        else:  # hsp
+            score = (det["speed"] or 0.0) / 300.0
+        max_score = max(max_score, score)
+    return max_score
+
+
+def _group_by_video(
+    detections: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Group detections by mp4_filename for video-grouped display.
+
+    Returns a list of video group dicts sorted by: confirmed first,
+    then by review score descending, then by event time.
+    """
+    groups: dict[str, list[dict[str, object]]] = {}
+    for det in detections:
+        mp4 = det["mp4_filename"]
+        groups.setdefault(mp4, []).append(det)
+
+    result: list[dict[str, object]] = []
+    for mp4, dets in groups.items():
+        sorted_dets = _sort_detections(dets)
+        has_confirmed = any(d["section"] == "confirmed" for d in dets)
+        review_score = _video_review_score(dets)
+        event_time_iso = dets[0]["event_time_iso"]
+        result.append(
+            {
+                "mp4_filename": mp4,
+                "event_time_iso": event_time_iso,
+                "has_confirmed": has_confirmed,
+                "review_score": review_score,
+                "detections": sorted_dets,
+            }
+        )
+
+    result.sort(key=lambda g: (not g["has_confirmed"], -g["review_score"], g["event_time_iso"]))
+    return result
+
 
 def _create_app() -> Flask:
     """Create and configure the Flask app."""
@@ -58,6 +130,7 @@ def _create_app() -> Flask:
             all_days[d.name] = data
 
         current_data = all_days[date_str]
+        video_groups = _group_by_video(current_data["detections"])
 
         return render_template(
             "review.html",
@@ -66,6 +139,7 @@ def _create_app() -> Flask:
             next_date=next_date,
             all_dates=date_names,
             current_data=current_data,
+            video_groups=video_groups,
             all_days=all_days,
         )
 

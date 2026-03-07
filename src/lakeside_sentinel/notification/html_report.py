@@ -103,6 +103,7 @@ def generate_report(
     settings: dict[str, object] | None = None,
     subtitle: str | None = None,
     for_email: bool = False,
+    total_clips: int | None = None,
 ) -> tuple[str, list[dict[str, str | bytes]]]:
     """Generate a self-contained HTML report.
 
@@ -150,7 +151,7 @@ def generate_report(
         filtered_reports.sort(key=_veh_sort_key, reverse=True)
         sort_label = "sorted by motorcycle confidence"
 
-    total_clips = len(clip_reports)
+    total_clips_count = total_clips if total_clips is not None else len(clip_reports)
     detected_clips = len(filtered_reports)
 
     sections: list[str] = []
@@ -158,7 +159,7 @@ def generate_report(
     cid_counter = 0
     for report in filtered_reports:
         local_time = report.event_time.astimezone()
-        time_str = local_time.strftime("%H:%M:%S")
+        time_str = local_time.strftime("%m-%d %H:%M:%S")
         has_detection = report.best_detection is not None
         border_color = "#22c55e" if has_detection else "#94a3b8"
         bg_color = "#f0fdf4" if has_detection else "#f8fafc"
@@ -312,7 +313,7 @@ def generate_report(
             if subtitle
             else ""
         )
-        + f'<p class="stats">{total_clips} clips analysed &middot; '
+        + f'<p class="stats">{total_clips_count} clips analysed &middot; '
         f"{detected_clips} with detections ({sort_label})</p>"
         + settings_html
         + "".join(sections)

@@ -17,28 +17,28 @@ def parse_args() -> argparse.Namespace:
         help="Launch the review web app for human-in-the-loop review.",
     )
     parser.add_argument(
-        "--debug",
+        "--verbose",
         action="store_true",
-        help="Run in debug mode (requires --veh or --hsp).",
+        help="Enable detailed DEBUG-level logging output.",
     )
 
-    debug_group = parser.add_argument_group("debug mode options (require --debug)")
-    debug_group.add_argument(
+    detector_group = parser.add_argument_group("single detector options (require --veh or --hsp)")
+    detector_group.add_argument(
         "--veh",
         action="store_true",
         help="Run vehicle detection (VEH) mode.",
     )
-    debug_group.add_argument(
+    detector_group.add_argument(
         "--hsp",
         action="store_true",
         help="Run high-speed person (HSP) detection mode.",
     )
-    debug_group.add_argument(
+    detector_group.add_argument(
         "--claude",
         action="store_true",
         help="Enable Claude Vision verification of detections (requires ANTHROPIC_API_KEY).",
     )
-    debug_group.add_argument(
+    detector_group.add_argument(
         "--claude-keep-rejected",
         action="store_true",
         help="Keep rejected detections in the HTML report (default: remove them).",
@@ -46,18 +46,18 @@ def parse_args() -> argparse.Namespace:
 
     args = parser.parse_args()
 
-    debug_flags = [args.veh, args.hsp, args.claude, args.claude_keep_rejected]
-    if args.debug:
-        if not args.veh and not args.hsp:
-            parser.error("--debug requires --veh or --hsp")
-        if args.veh and args.hsp:
-            parser.error("--veh and --hsp are mutually exclusive")
-    elif any(debug_flags):
-        flag_names = ["--veh", "--hsp", "--claude", "--claude-keep-rejected"]
-        used = [f for f, v in zip(flag_names, debug_flags) if v]
-        parser.error(f"{', '.join(used)} can only be used with --debug")
+    if args.veh and args.hsp:
+        parser.error("--veh and --hsp are mutually exclusive")
 
-    if args.review and args.debug:
-        parser.error("--review cannot be used with --debug")
+    if (args.veh or args.hsp) and args.review:
+        parser.error("--veh/--hsp cannot be used with --review")
+
+    if (args.claude or args.claude_keep_rejected) and not (args.veh or args.hsp):
+        flag_names = []
+        if args.claude:
+            flag_names.append("--claude")
+        if args.claude_keep_rejected:
+            flag_names.append("--claude-keep-rejected")
+        parser.error(f"{', '.join(flag_names)} can only be used with --veh or --hsp")
 
     return args

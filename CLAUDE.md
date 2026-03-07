@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & run logic
-├── cli.py                 # CLI argument parser (present mode default, --review, --debug --veh/--hsp)
+├── cli.py                 # CLI argument parser (present mode default, --review, --veh/--hsp, --verbose)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -73,17 +73,27 @@ Output files:
 - `output/fine-tuning/` — YOLO-format annotations (`images/train/`, `labels/train/`, `data.yaml`)
 - `output/fine-tuning/other/` — images classified as "other" for later manual review
 
-### Debug mode
+### Single detector mode
 
 Runs a single detector with full diagnostic output (confidence scores, class names, Claude badges).
 
 ```bash
-python -m lakeside_sentinel --debug --veh              # VEH detection
-python -m lakeside_sentinel --debug --veh --date 2026-02-28  # VEH for a specific date
-python -m lakeside_sentinel --debug --veh --claude     # VEH with Claude verification
-python -m lakeside_sentinel --debug --veh --claude --claude-keep-rejected  # keep rejected
-python -m lakeside_sentinel --debug --hsp              # HSP detection
-python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verification
+python -m lakeside_sentinel --veh                      # VEH detection
+python -m lakeside_sentinel --veh --date 2026-02-28    # VEH for a specific date
+python -m lakeside_sentinel --veh --claude             # VEH with Claude verification
+python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected
+python -m lakeside_sentinel --hsp                      # HSP detection
+python -m lakeside_sentinel --hsp --claude             # HSP with Claude verification
+```
+
+### Verbose mode
+
+Add `--verbose` to any mode for DEBUG-level logging output.
+
+```bash
+python -m lakeside_sentinel --verbose                  # present mode + DEBUG logging
+python -m lakeside_sentinel --review --verbose         # review mode + DEBUG logging
+python -m lakeside_sentinel --veh --verbose            # single detector + DEBUG logging
 ```
 
 Scheduled via `run.sh` (passes `--review`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
@@ -191,7 +201,7 @@ See `.env.example` for the full list. Key variables:
 - `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 240.0, px/sec) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 800.0, px/sec) - HSP tracking (thresholds are FPS-invariant)
-- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for present mode, review mode, and `--debug --claude`)
+- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for present mode, review mode, and `--veh/--hsp --claude`)
 - `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
 - `CLAUDE_VISION_PROMPT` - Custom prompt for Claude Vision verification (defaults to built-in motorized vehicle prompt)
 - `REVIEW_PORT` (default 5000) - port for the review web app server

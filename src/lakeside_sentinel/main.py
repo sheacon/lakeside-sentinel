@@ -241,7 +241,7 @@ class Monitor:
         cached_count = 0
         for i, event in enumerate(events):
             local_time = event.start_time.astimezone()
-            label = local_time.strftime("%H:%M:%S")
+            label = local_time.strftime("%m-%d %H:%M:%S")
 
             filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
             filepath = dump_dir / filename
@@ -323,7 +323,7 @@ class Monitor:
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
-            label = local_time.strftime("%H:%M:%S")
+            label = local_time.strftime("%m-%d %H:%M:%S")
 
             frames = extract_frames(mp4_bytes, fps_sample=self._settings.veh_fps_sample)
             frames = crop_to_roi(
@@ -436,7 +436,7 @@ class Monitor:
         for idx, (event_i, mp4_bytes) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
-            label = local_time.strftime("%H:%M:%S")
+            label = local_time.strftime("%m-%d %H:%M:%S")
 
             frames = extract_frames(mp4_bytes, fps_sample=fps)
             frames = crop_to_roi(
@@ -612,6 +612,7 @@ class Monitor:
         subtitle: str | None = None,
         step_label: str = "[4/4]",
         open_browser: bool = True,
+        total_clips: int | None = None,
     ) -> tuple[Path, str | None]:
         """Generate HTML report and optionally send email."""
         t0 = time.monotonic()
@@ -627,6 +628,7 @@ class Monitor:
             mode=mode,
             settings=settings_dict,
             subtitle=subtitle,
+            total_clips=total_clips,
         )
 
         if mode == "present":
@@ -651,6 +653,7 @@ class Monitor:
                 settings=settings_dict,
                 subtitle=subtitle,
                 for_email=True,
+                total_clips=total_clips,
             )
             email_id = self._email.send_report(
                 email_html, f"{title} - {date_str}", attachments=email_attachments
@@ -920,6 +923,7 @@ class Monitor:
                 veh_debug,
                 hsp_debug,
                 self._settings.crop_padding,
+                total_clips=len(clips),
             )
 
         # Check if there's anything to review
@@ -956,8 +960,10 @@ class Monitor:
                 logger.warning("Staging dir missing for %s, skipping.", date_str)
                 continue
 
-            # Save fine-tuning annotations
             staging_data = load_staged_detections(staging_dir)
+            stored_total_clips = staging_data.get("total_clips")
+
+            # Save fine-tuning annotations
             for det_dict in staging_data["detections"]:
                 det_id = det_dict["id"]
                 class_label = classifications.get(det_id)
@@ -987,6 +993,7 @@ class Monitor:
                 subtitle=date_str,
                 step_label="[5/5]",
                 open_browser=True,
+                total_clips=stored_total_clips,
             )
 
             # Generate debug reports
@@ -1008,6 +1015,7 @@ class Monitor:
                 mode="present",
                 subtitle=date_str,
                 for_email=True,
+                total_clips=stored_total_clips,
             )
             all_present_htmls.append(email_html)
             all_attachments.extend(email_attachments)
@@ -1155,8 +1163,11 @@ def main() -> None:
     if args.date:
         target_date = datetime.strptime(args.date, "%Y-%m-%d").date()
 
-    if args.debug:
-        # Debug mode
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    if args.veh or args.hsp:
+        # Single detector mode
         if args.claude and not settings.anthropic_api_key:
             logger.error("--claude requires ANTHROPIC_API_KEY to be set in .env")
             raise SystemExit(1)
