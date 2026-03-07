@@ -12,9 +12,9 @@ def parse_args() -> argparse.Namespace:
         help="Analyze a specific date (YYYY-MM-DD). Defaults to the most recent daylight period.",
     )
     parser.add_argument(
-        "--email",
+        "--review",
         action="store_true",
-        help="Send an email report (HTML without embedded videos).",
+        help="Launch the review web app for human-in-the-loop review.",
     )
     parser.add_argument(
         "--debug",
@@ -56,5 +56,8 @@ def parse_args() -> argparse.Namespace:
         flag_names = ["--veh", "--hsp", "--claude", "--claude-keep-rejected"]
         used = [f for f, v in zip(flag_names, debug_flags) if v]
         parser.error(f"{', '.join(used)} can only be used with --debug")
+
+    if args.review and args.debug:
+        parser.error("--review cannot be used with --debug")
 
     return args

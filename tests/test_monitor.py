@@ -449,19 +449,24 @@ class TestPresentMode:
         # Claude verification should have been called
         mock_verifier_cls.return_value.verify_detections.assert_called()
 
-        # generate_report called 3 times: present + veh debug + hsp debug
-        assert mock_generate_report.call_count == 3
+        # generate_report called 4 times: present + present email + veh debug + hsp debug
+        assert mock_generate_report.call_count == 4
 
-        # First call is the present report
+        # First call is the present report (local)
         call_kwargs = mock_generate_report.call_args_list[0][1]
         assert call_kwargs["mode"] == "present"
 
-        # Second call is the VEH debug report
+        # Second call is the present report (email)
         call_kwargs = mock_generate_report.call_args_list[1][1]
+        assert call_kwargs["mode"] == "present"
+        assert call_kwargs["for_email"] is True
+
+        # Third call is the VEH debug report
+        call_kwargs = mock_generate_report.call_args_list[2][1]
         assert call_kwargs["mode"] == "veh"
 
-        # Third call is the HSP debug report
-        call_kwargs = mock_generate_report.call_args_list[2][1]
+        # Fourth call is the HSP debug report
+        call_kwargs = mock_generate_report.call_args_list[3][1]
         assert call_kwargs["mode"] == "hsp"
 
     @patch("lakeside_sentinel.main.webbrowser.open")
@@ -590,8 +595,8 @@ class TestPresentMode:
         monitor = Monitor(mock_settings)
         monitor.run_present()
 
-        # generate_report called 3 times: present + veh debug + hsp debug
-        assert mock_generate_report.call_count == 3
+        # generate_report called 4 times: present + present email + veh debug + hsp debug
+        assert mock_generate_report.call_count == 4
 
         # The merged present report should contain both Motorcycle and HSP detections
         clip_reports = mock_generate_report.call_args_list[0][0][0]
@@ -670,15 +675,15 @@ class TestPresentModeDebugReports:
         monitor = Monitor(mock_settings)
         monitor.run_present(target_date=datetime(2026, 2, 28).date())
 
-        # Call 0 = present, call 1 = VEH debug, call 2 = HSP debug
-        assert mock_generate_report.call_count == 3
+        # Call 0 = present, call 1 = present email, call 2 = VEH debug, call 3 = HSP debug
+        assert mock_generate_report.call_count == 4
 
         # Present report should NOT have below-threshold Bicycle
         present_reports = mock_generate_report.call_args_list[0][0][0]
         assert "Bicycle" not in present_reports[0].class_detections
 
         # VEH debug report should include below-threshold Bicycle
-        veh_debug_reports = mock_generate_report.call_args_list[1][0][0]
+        veh_debug_reports = mock_generate_report.call_args_list[2][0][0]
         assert len(veh_debug_reports) == 1
         assert "Bicycle" in veh_debug_reports[0].class_detections
         assert "Motorcycle" in veh_debug_reports[0].class_detections
@@ -760,15 +765,15 @@ class TestPresentModeDebugReports:
         monitor = Monitor(mock_settings)
         monitor.run_present(target_date=datetime(2026, 2, 28).date())
 
-        # Call 0 = present, call 1 = VEH debug, call 2 = HSP debug
-        assert mock_generate_report.call_count == 3
+        # Call 0 = present, call 1 = present email, call 2 = VEH debug, call 3 = HSP debug
+        assert mock_generate_report.call_count == 4
 
         # Present report should NOT have HSP (below threshold)
         present_reports = mock_generate_report.call_args_list[0][0][0]
         assert "HSP" not in present_reports[0].class_detections
 
         # HSP debug report should include the below-threshold track
-        hsp_debug_reports = mock_generate_report.call_args_list[2][0][0]
+        hsp_debug_reports = mock_generate_report.call_args_list[3][0][0]
         assert len(hsp_debug_reports) == 1
         assert "HSP" in hsp_debug_reports[0].class_detections
         assert hsp_debug_reports[0].best_detection is not None
@@ -820,7 +825,7 @@ class TestPresentModeDebugReports:
         mock_email_cls.return_value.send_report.return_value = "email-id-123"
 
         monitor = Monitor(mock_settings)
-        monitor.run_present(send_email=True, target_date=datetime(2026, 2, 28).date())
+        monitor.run_present(target_date=datetime(2026, 2, 28).date())
 
         # Email should only be sent once (for the present report, not debug reports)
         mock_email_cls.return_value.send_report.assert_called_once()

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Review - {{ current_date }}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 20px; background: #fff; }
+.top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding: 12px 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 100; }
+.nav { display: flex; align-items: center; gap: 12px; }
+.nav a { color: #3b82f6; text-decoration: none; font-weight: 500; }
+.nav a:hover { text-decoration: underline; }
+.nav .current { font-weight: 700; color: #1e293b; font-size: 1.1em; }
+.nav .disabled { color: #cbd5e1; pointer-events: none; }
+.btn { padding: 8px 20px; border: none; border-radius: 6px; font-size: 0.95em; font-weight: 600; cursor: pointer; }
+.btn-exit { background: #f1f5f9; color: #475569; }
+.btn-exit:hover { background: #e2e8f0; }
+.btn-submit { background: #22c55e; color: #fff; }
+.btn-submit:hover { background: #16a34a; }
+.section-header { margin: 24px 0 12px; padding: 8px 12px; background: #f1f5f9; border-radius: 6px; cursor: pointer; user-select: none; }
+.section-header h2 { margin: 0; font-size: 1.1em; display: flex; align-items: center; gap: 8px; }
+.section-header .count { color: #64748b; font-weight: 400; font-size: 0.9em; }
+.section-header .arrow { transition: transform 0.2s; }
+.section-header.collapsed .arrow { transform: rotate(-90deg); }
+.section-content { display: block; }
+.section-content.hidden { display: none; }
+.card { display: flex; gap: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 8px; align-items: flex-start; }
+.card.checked { background: #f0fdf4; border-color: #86efac; }
+.card input[type="checkbox"] { margin-top: 4px; width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+.card img { max-width: 240px; max-height: 180px; border-radius: 4px; cursor: pointer; }
+.card-info { flex: 1; }
+.card-info .time { font-weight: 600; color: #1e293b; }
+.card-info .class-name { color: #475569; }
+.card-info .metrics { color: #64748b; font-size: 0.9em; }
+.card-info .verification { font-size: 0.85em; margin-top: 2px; }
+.verified { color: #16a34a; }
+.rejected { color: #dc2626; }
+.card-info select { margin-top: 6px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.9em; }
+.day-tab { display: inline-block; padding: 4px 10px; margin: 0 2px; border-radius: 4px; font-size: 0.85em; text-decoration: none; color: #475569; }
+.day-tab.active { background: #3b82f6; color: #fff; font-weight: 600; }
+.day-tab:hover:not(.active) { background: #f1f5f9; }
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <button class="btn btn-exit" onclick="doExit()">Exit</button>
+  <div class="nav">
+    {% if prev_date %}
+    <a href="/{{ prev_date }}">&#9664; {{ prev_date }}</a>
+    {% else %}
+    <span class="disabled">&#9664;</span>
+    {% endif %}
+    <span class="current">{{ current_date }}</span>
+    {% if next_date %}
+    <a href="/{{ next_date }}">{{ next_date }} &#9654;</a>
+    {% else %}
+    <span class="disabled">&#9654;</span>
+    {% endif %}
+  </div>
+  <button class="btn btn-submit" onclick="doSubmit()">Submit All</button>
+</div>
+
+<div style="margin-bottom: 16px; text-align: center;">
+  {% for d in all_dates %}
+  <a href="/{{ d }}" class="day-tab {% if d == current_date %}active{% endif %}">{{ d }}</a>
+  {% endfor %}
+</div>
+
+{% set sections = [
+  ("confirmed", "Confirmed Detections", true),
+  ("veh_debug", "VEH Debug Detections", false),
+  ("hsp_debug", "HSP Debug Detections", false)
+] %}
+
+{% for section_id, section_title, default_checked in sections %}
+{% set section_dets = current_data.detections | selectattr("section", "equalto", section_id) | list %}
+{% if section_dets %}
+<div class="section-header" onclick="toggleSection('{{ section_id }}')">
+  <h2><span class="arrow" id="arrow-{{ section_id }}">&#9660;</span> {{ section_title }} <span class="count">({{ section_dets | length }})</span></h2>
+</div>
+<div class="section-content" id="section-{{ section_id }}">
+  {% for det in section_dets %}
+  <div class="card" id="card-{{ det.id }}">
+    <input type="checkbox"
+           data-id="{{ det.id }}"
+           data-date="{{ current_date }}"
+           {% if default_checked %}checked{% endif %}
+           onchange="onCheckChange(this)">
+    <img src="/crop/{{ current_date }}/{{ det.id }}" loading="lazy" alt="{{ det.class_name }}" onclick="showModal(this.src)">
+    <div class="card-info">
+      <div class="time">{{ det.event_time_iso[:19] }}</div>
+      <div class="class-name">{{ det.class_name }}</div>
+      <div class="metrics">
+        {% if det.speed is not none %}
+        Speed: {{ "%.0f" | format(det.speed) }} px/sec
+        {% else %}
+        Confidence: {{ "%.0f%%" | format(det.confidence * 100) }}
+        {% endif %}
+      </div>
+      {% if det.verification_status == "confirmed" %}
+      <div class="verification verified">&#10003; Claude verified</div>
+      {% elif det.verification_status == "rejected" %}
+      <div class="verification rejected">&#10007; Claude rejected</div>
+      {% endif %}
+      {% if det.verification_response %}
+      <div class="metrics" style="font-style:italic">Claude: "{{ det.verification_response }}"</div>
+      {% endif %}
+      <select data-id="{{ det.id }}" data-date="{{ current_date }}" onchange="onClassChange(this)">
+        <option value="">-- skip --</option>
+        <option value="bicycle">bicycle</option>
+        <option value="chair">chair</option>
+        <option value="dog">dog</option>
+        <option value="motorbike">motorbike</option>
+        <option value="person">person</option>
+        <option value="scooter">scooter</option>
+        <option value="stroller">stroller</option>
+        <option value="other">other</option>
+      </select>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endfor %}
+
+<div class="modal-overlay" id="modal" onclick="hideModal()">
+  <img id="modal-img" src="" alt="Full size crop">
+</div>
+
+<script>
+// State: persisted across navigation
+const STATE_KEY = 'review_state';
+
+function loadState() {
+  try {
+    const raw = sessionStorage.getItem(STATE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+function saveState(state) {
+  sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+
+function getDayState(state, dateStr) {
+  if (!state[dateStr]) {
+    state[dateStr] = { selected: {}, classifications: {} };
+  }
+  return state[dateStr];
+}
+
+// Initialize state for current date from checkbox defaults
+function initCurrentDate() {
+  const state = loadState();
+  const dateStr = '{{ current_date }}';
+  const dayState = getDayState(state, dateStr);
+
+  // If this date has no stored state yet, initialize from defaults
+  if (Object.keys(dayState.selected).length === 0) {
+    document.querySelectorAll('input[type="checkbox"][data-date="' + dateStr + '"]').forEach(cb => {
+      dayState.selected[cb.dataset.id] = cb.checked;
+    });
+  }
+
+  // Apply stored state to checkboxes
+  document.querySelectorAll('input[type="checkbox"][data-date="' + dateStr + '"]').forEach(cb => {
+    const id = cb.dataset.id;
+    if (id in dayState.selected) {
+      cb.checked = dayState.selected[id];
+    }
+    updateCardStyle(cb);
+  });
+
+  // Apply stored classifications to dropdowns
+  document.querySelectorAll('select[data-date="' + dateStr + '"]').forEach(sel => {
+    const id = sel.dataset.id;
+    if (dayState.classifications[id]) {
+      sel.value = dayState.classifications[id];
+    }
+  });
+
+  saveState(state);
+}
+
+function onCheckChange(cb) {
+  const state = loadState();
+  const dayState = getDayState(state, cb.dataset.date);
+  dayState.selected[cb.dataset.id] = cb.checked;
+  saveState(state);
+  updateCardStyle(cb);
+}
+
+function onClassChange(sel) {
+  const state = loadState();
+  const dayState = getDayState(state, sel.dataset.date);
+  if (sel.value) {
+    dayState.classifications[sel.dataset.id] = sel.value;
+  } else {
+    delete dayState.classifications[sel.dataset.id];
+  }
+  saveState(state);
+}
+
+function updateCardStyle(cb) {
+  const card = document.getElementById('card-' + cb.dataset.id);
+  if (card) {
+    card.classList.toggle('checked', cb.checked);
+  }
+}
+
+function toggleSection(sectionId) {
+  const content = document.getElementById('section-' + sectionId);
+  const header = content.previousElementSibling;
+  const arrow = document.getElementById('arrow-' + sectionId);
+  content.classList.toggle('hidden');
+  header.classList.toggle('collapsed');
+}
+
+function showModal(src) {
+  document.getElementById('modal-img').src = src;
+  document.getElementById('modal').classList.add('show');
+}
+
+function hideModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+async function doSubmit() {
+  const state = loadState();
+  const days = {};
+
+  // Build payload from state for all dates
+  const allDates = {{ all_dates | tojson }};
+  for (const dateStr of allDates) {
+    const dayState = getDayState(state, dateStr);
+    const selected = [];
+    const classifications = {};
+
+    for (const [id, checked] of Object.entries(dayState.selected)) {
+      if (checked) selected.push(id);
+    }
+    for (const [id, cls] of Object.entries(dayState.classifications)) {
+      classifications[id] = cls;
+    }
+
+    days[dateStr] = { selected, classifications };
+  }
+
+  try {
+    const resp = await fetch('/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ days })
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      sessionStorage.removeItem(STATE_KEY);
+      document.body.innerHTML = '<div style="text-align:center;margin-top:100px"><h1>Submitted</h1><p>Reports are being generated. You can close this tab.</p></div>';
+    }
+  } catch (err) {
+    alert('Submit failed: ' + err.message);
+  }
+}
+
+async function doExit() {
+  try {
+    await fetch('/exit', { method: 'POST' });
+    document.body.innerHTML = '<div style="text-align:center;margin-top:100px"><h1>Review Deferred</h1><p>Staged data preserved. You can close this tab.</p></div>';
+  } catch (err) {
+    alert('Exit failed: ' + err.message);
+  }
+}
+
+// Keyboard: Escape closes modal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideModal();
+});
+
+// Initialize on load
+initCurrentDate();
+</script>
+</body>
+</html>

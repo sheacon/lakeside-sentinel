@@ -63,11 +63,16 @@ class TestCLIValidation:
         assert args.veh
         assert args.claude
 
-    def test_email_without_debug(self) -> None:
-        with patch.object(sys, "argv", ["prog", "--email"]):
+    def test_review_flag(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--review"]):
             args = parse_args()
-        assert args.email
+        assert args.review
         assert not args.debug
+
+    def test_review_with_debug_is_error(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--review", "--debug", "--veh"]):
+            with pytest.raises(SystemExit):
+                parse_args()
 
     def test_date_without_debug(self) -> None:
         with patch.object(sys, "argv", ["prog", "--date", "2026-03-01"]):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import webbrowser
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from lakeside_sentinel.camera.auth import NestAuth
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
-_CLEANUP_MAX_AGE_DAYS = 7
+_CLEANUP_MAX_AGE_DAYS = 14
 _SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
 
@@ -62,6 +62,19 @@ def _cleanup_old_files(directory: Path, suffix: str, max_age_days: int) -> None:
             logger.info("Cleaned up old file: %s", filepath)
 
 
+def _cleanup_old_dirs(directory: Path, max_age_days: int) -> None:
+    """Delete subdirectories in directory that are older than max_age_days."""
+    if not directory.exists():
+        return
+    cutoff = time.time() - (max_age_days * 86400)
+    import shutil
+
+    for dirpath in directory.iterdir():
+        if dirpath.is_dir() and dirpath.stat().st_mtime < cutoff:
+            shutil.rmtree(dirpath)
+            logger.info("Cleaned up old directory: %s", dirpath)
+
+
 def _print_settings(settings: Settings) -> None:
     """Log all settings, masking sensitive values."""
     for name, value in settings.model_dump().items():
@@ -71,6 +84,30 @@ def _print_settings(settings: Settings) -> None:
             display = value
         label = name.replace("_", " ").title()
         logger.info("  %s %s", f"{label + ':':<28}", display)
+
+
+def _dates_needing_analysis(
+    max_age_days: int,
+    latitude: float,
+    longitude: float,
+) -> list[date]:
+    """Return dates within the last max_age_days that have no staging dir and no report file."""
+    today = date.today()
+    dates: list[date] = []
+    for days_ago in range(max_age_days):
+        d = today - timedelta(days=days_ago)
+        date_str = d.isoformat()
+
+        staging_dir = Path("output") / "staging" / date_str
+        report_file = Path("output") / f"report-{date_str}.html"
+
+        if staging_dir.exists() or report_file.exists():
+            continue
+        dates.append(d)
+
+    # Return in chronological order (oldest first)
+    dates.reverse()
+    return dates
 
 
 class Monitor:
@@ -574,6 +611,7 @@ class Monitor:
         send_email: bool,
         subtitle: str | None = None,
         step_label: str = "[4/4]",
+        open_browser: bool = True,
     ) -> tuple[Path, str | None]:
         """Generate HTML report and optionally send email."""
         t0 = time.monotonic()
@@ -599,7 +637,8 @@ class Monitor:
         report_path.write_text(html)
         logger.info("HTML report written to %s", report_path)
         logger.info("       Report: %s", report_path.resolve())
-        webbrowser.open(report_path.resolve().as_uri())
+        if open_browser:
+            webbrowser.open(report_path.resolve().as_uri())
 
         email_id: str | None = None
         if send_email:
@@ -685,11 +724,84 @@ class Monitor:
             )
         return merged
 
+    # ── Detection pipeline ────────────────────────────────────────────
+
+    def _run_detection_pipeline(
+        self,
+        target_date: date,
+    ) -> (
+        tuple[
+            list[ClipReport],
+            list[ClipReport],
+            list[ClipReport],
+            list[CameraEvent],
+            list[tuple[int, bytes]],
+            float,
+            int,
+            int,
+        ]
+        | None
+    ):
+        """Run the full detection pipeline for a date.
+
+        Returns:
+            Tuple of (merged_reports, veh_debug_reports, hsp_debug_reports,
+                      events, clips, total_mb, veh_frames, hsp_frames)
+            or None if no events found.
+        """
+        start, end = get_daylight_span_for_date(
+            target_date,
+            self._settings.camera_latitude,
+            self._settings.camera_longitude,
+        )
+        date_str = target_date.isoformat()
+
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  DETECTION PIPELINE — %s", date_str)
+        logger.info("  From: %s", start.astimezone().strftime("%d %b %Y %H:%M:%S %Z"))
+        logger.info("  To:   %s", end.astimezone().strftime("%d %b %Y %H:%M:%S %Z"))
+        logger.info("=" * 60)
+        logger.info("")
+
+        events = self._fetch_events(start, end, step_label="[1/5]")
+        if not events:
+            logger.info("No events for %s.", date_str)
+            return None
+
+        clips, total_mb = self._download_clips(events, step_label="[2/5]")
+
+        veh_reports, veh_count, veh_frames, veh_debug_reports = self._detect_veh(
+            clips, events, step_label="[3/5]"
+        )
+        hsp_reports, hsp_count, hsp_frames, hsp_debug_reports = self._detect_hsp(
+            clips, events, step_label="[3/5]"
+        )
+
+        merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
+
+        merged_reports, detection_count = self._verify_with_claude(
+            merged_reports, False, step_label="[4/5]"
+        )
+
+        logger.info("")
+        logger.info("  Pipeline complete for %s: %d detections", date_str, detection_count)
+
+        return (
+            merged_reports,
+            veh_debug_reports,
+            hsp_debug_reports,
+            events,
+            clips,
+            total_mb,
+            veh_frames,
+            hsp_frames,
+        )
+
     # ── Public run methods ───────────────────────────────────────────
 
     def run_present(
         self,
-        send_email: bool = False,
         target_date: date | None = None,
     ) -> None:
         """Present mode: run both VEH + HSP with Claude verification."""
@@ -725,7 +837,7 @@ class Monitor:
             date_str,
             "present",
             "Motorized Vehicle Detection Report",
-            send_email,
+            True,
             subtitle=date_str,
             step_label="[5/5]",
         )
@@ -747,16 +859,185 @@ class Monitor:
         logger.info("  Report:     %s", report_path.resolve())
         logger.info("  VEH debug:  %s", veh_debug_path.resolve())
         logger.info("  HSP debug:  %s", hsp_debug_path.resolve())
-        if send_email:
-            logger.info("  Email:      %s", "sent" if email_id else "failed")
+        logger.info("  Email:      %s", "sent" if email_id else "failed")
         dump_dir = Path("output") / "video"
         logger.info("  Clips:      %s", dump_dir.resolve())
         logger.info("=" * 60)
         logger.info("")
 
+    def run_review(
+        self,
+        target_date: date | None = None,
+        review_port: int = 5000,
+    ) -> None:
+        """Review mode: detect, stage, and launch web app for human review."""
+        from lakeside_sentinel.review.fine_tuning import (
+            ensure_data_yaml,
+            save_annotation,
+            save_other,
+        )
+        from lakeside_sentinel.review.server import run_review_server
+        from lakeside_sentinel.review.staging import (
+            cleanup_staging,
+            discover_unreviewed,
+            load_frame,
+            load_staged_detections,
+            rebuild_clip_reports,
+            stage_detections,
+        )
+
+        # Determine which dates need analysis
+        if target_date is not None:
+            dates_to_analyze = [target_date]
+        else:
+            dates_to_analyze = _dates_needing_analysis(
+                _CLEANUP_MAX_AGE_DAYS,
+                self._settings.camera_latitude,
+                self._settings.camera_longitude,
+            )
+
+        if dates_to_analyze:
+            logger.info("Dates needing analysis: %s", [d.isoformat() for d in dates_to_analyze])
+        else:
+            logger.info("No new dates to analyze.")
+
+        # Run detection pipeline for each date and stage results
+        for d in dates_to_analyze:
+            date_str = d.isoformat()
+            staging_dir = Path("output") / "staging" / date_str
+            if staging_dir.exists():
+                logger.info("Staging data already exists for %s, skipping.", date_str)
+                continue
+
+            result = self._run_detection_pipeline(d)
+            if result is None:
+                continue
+
+            merged, veh_debug, hsp_debug, events, clips, total_mb, veh_frames, hsp_frames = result
+            stage_detections(
+                date_str,
+                merged,
+                veh_debug,
+                hsp_debug,
+                self._settings.crop_padding,
+            )
+
+        # Check if there's anything to review
+        unreviewed = discover_unreviewed()
+        if not unreviewed:
+            logger.info("No staged data to review.")
+            return
+
+        logger.info("Launching review server with %d day(s) queued.", len(unreviewed))
+
+        # Launch review server (blocks until submit or exit)
+        result = run_review_server(port=review_port)
+
+        if result is None:
+            logger.info("Review deferred — staged data preserved.")
+            return
+
+        # Process submit result
+        days_data = result.get("days", {})
+        logger.info("Processing submit for %d day(s).", len(days_data))
+
+        fine_tuning_dir = Path("output") / "fine-tuning"
+        has_annotations = False
+
+        all_present_htmls: list[str] = []
+        all_attachments: list[dict[str, str | bytes]] = []
+
+        for date_str, day_info in sorted(days_data.items()):
+            selected_ids = set(day_info.get("selected", []))
+            classifications = day_info.get("classifications", {})
+
+            staging_dir = Path("output") / "staging" / date_str
+            if not staging_dir.exists():
+                logger.warning("Staging dir missing for %s, skipping.", date_str)
+                continue
+
+            # Save fine-tuning annotations
+            staging_data = load_staged_detections(staging_dir)
+            for det_dict in staging_data["detections"]:
+                det_id = det_dict["id"]
+                class_label = classifications.get(det_id)
+                if not class_label:
+                    continue
+
+                frame = load_frame(staging_dir, det_dict["frame_filename"])
+                bbox = tuple(det_dict["bbox"])
+                image_id = f"{date_str}_{det_id}"
+
+                if class_label == "other":
+                    save_other(frame, bbox, image_id, fine_tuning_dir)
+                else:
+                    save_annotation(frame, bbox, class_label, image_id, fine_tuning_dir)
+                    has_annotations = True
+
+            # Rebuild clip reports for selected detections
+            clip_reports = rebuild_clip_reports(staging_dir, selected_ids)
+
+            # Generate present report for this day
+            report_path, _ = self._generate_and_send_report(
+                clip_reports,
+                date_str,
+                "present",
+                "Motorized Vehicle Detection Report",
+                False,
+                subtitle=date_str,
+                step_label="[5/5]",
+                open_browser=True,
+            )
+
+            # Generate debug reports
+            # Rebuild full VEH/HSP debug reports from staging
+            veh_ids = {d["id"] for d in staging_data["detections"] if d["source"] == "veh"}
+            hsp_ids = {d["id"] for d in staging_data["detections"] if d["source"] == "hsp"}
+            veh_debug_reports = rebuild_clip_reports(staging_dir, veh_ids)
+            hsp_debug_reports = rebuild_clip_reports(staging_dir, hsp_ids)
+
+            self._write_debug_report(veh_debug_reports, date_str, "veh", "VEH Detection Report")
+            self._write_debug_report(hsp_debug_reports, date_str, "hsp", "HSP Detection Report")
+
+            # Collect email HTML for this day
+            email_html, email_attachments = generate_report(
+                clip_reports,
+                crop_padding=self._settings.crop_padding,
+                include_video=False,
+                title=f"Detection Report — {date_str}",
+                mode="present",
+                subtitle=date_str,
+                for_email=True,
+            )
+            all_present_htmls.append(email_html)
+            all_attachments.extend(email_attachments)
+
+            # Clean up staging
+            cleanup_staging(staging_dir)
+
+        # Send one combined email
+        if all_present_htmls:
+            combined_html = "<br/><hr/><br/>".join(all_present_htmls)
+            date_range = sorted(days_data.keys())
+            if len(date_range) == 1:
+                subject = f"Motorized Vehicle Detection Report - {date_range[0]}"
+            else:
+                subject = (
+                    f"Motorized Vehicle Detection Report - {date_range[0]} to {date_range[-1]}"
+                )
+            email_id = self._email.send_report(combined_html, subject, attachments=all_attachments)
+            if email_id:
+                logger.info("Combined email sent (%s)", email_id)
+            else:
+                logger.info("Combined email FAILED")
+
+        if has_annotations:
+            ensure_data_yaml(fine_tuning_dir)
+
+        logger.info("Review complete.")
+
     def run_debug_veh(
         self,
-        send_email: bool = False,
         target_date: date | None = None,
         use_claude: bool = False,
         claude_keep_rejected: bool = False,
@@ -790,7 +1071,7 @@ class Monitor:
             date_str,
             "veh",
             "VEH Detection Report",
-            send_email,
+            False,
             step_label=f"[{total}/{total}]",
         )
 
@@ -802,8 +1083,6 @@ class Monitor:
         logger.info("  Frames:     %d analyzed", total_frames)
         logger.info("  Detections: %d", detection_count)
         logger.info("  Report:     %s", report_path.resolve())
-        if send_email:
-            logger.info("  Email:      %s", "sent" if email_id else "failed")
         dump_dir = Path("output") / "video"
         logger.info("  Clips:      %s", dump_dir.resolve())
         logger.info("=" * 60)
@@ -811,7 +1090,6 @@ class Monitor:
 
     def run_debug_hsp(
         self,
-        send_email: bool = False,
         target_date: date | None = None,
         use_claude: bool = False,
         claude_keep_rejected: bool = False,
@@ -846,7 +1124,7 @@ class Monitor:
             date_str,
             "hsp",
             "HSP Detection Report",
-            send_email,
+            False,
             step_label=f"[{total}/{total}]",
         )
 
@@ -858,8 +1136,6 @@ class Monitor:
         logger.info("  Frames:     %d analyzed (fps=%d)", total_frames, fps)
         logger.info("  Detections: %d", detection_count)
         logger.info("  Report:     %s", report_path.resolve())
-        if send_email:
-            logger.info("  Email:      %s", "sent" if email_id else "failed")
         dump_dir = Path("output") / "video"
         logger.info("  Clips:      %s", dump_dir.resolve())
         logger.info("=" * 60)
@@ -873,6 +1149,7 @@ def main() -> None:
     _setup_file_logging()
     _cleanup_old_files(Path("output") / "logs", ".log", _CLEANUP_MAX_AGE_DAYS)
     _cleanup_old_files(Path("output") / "video", ".mp4", _CLEANUP_MAX_AGE_DAYS)
+    _cleanup_old_dirs(Path("output") / "staging", _CLEANUP_MAX_AGE_DAYS)
 
     target_date: date | None = None
     if args.date:
@@ -888,18 +1165,27 @@ def main() -> None:
 
         if args.veh:
             monitor.run_debug_veh(
-                send_email=args.email,
                 target_date=target_date,
                 use_claude=args.claude,
                 claude_keep_rejected=args.claude_keep_rejected,
             )
         elif args.hsp:
             monitor.run_debug_hsp(
-                send_email=args.email,
                 target_date=target_date,
                 use_claude=args.claude,
                 claude_keep_rejected=args.claude_keep_rejected,
             )
+    elif args.review:
+        # Review mode
+        if not settings.anthropic_api_key:
+            logger.error("Review mode requires ANTHROPIC_API_KEY to be set in .env")
+            raise SystemExit(1)
+
+        monitor = Monitor(settings)
+        monitor.run_review(
+            target_date=target_date,
+            review_port=settings.review_port,
+        )
     else:
         # Present mode (default)
         if not settings.anthropic_api_key:
@@ -908,7 +1194,6 @@ def main() -> None:
 
         monitor = Monitor(settings)
         monitor.run_present(
-            send_email=args.email,
             target_date=target_date,
         )
 

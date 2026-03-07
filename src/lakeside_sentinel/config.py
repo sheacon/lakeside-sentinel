@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     hsp_person_confidence_threshold: float = 0.4
     hsp_max_match_distance: float = 800.0
 
+    # Review server
+    review_port: int = 5000
+
     # Claude Vision verification (optional)
     anthropic_api_key: str = ""
     claude_vision_model: str = "claude-sonnet-4-20250514"
