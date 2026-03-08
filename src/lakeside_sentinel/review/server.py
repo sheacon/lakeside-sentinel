@@ -10,7 +10,7 @@ from pathlib import Path
 from queue import Queue
 
 import cv2
-from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
+from flask import Flask, Response, jsonify, redirect, render_template, request, send_file, url_for
 
 from lakeside_sentinel.review.staging import (
     discover_unreviewed,
@@ -180,6 +180,14 @@ def _create_app() -> Flask:
         cropped = cv2.resize(cropped, (w * 2, h * 2), interpolation=cv2.INTER_CUBIC)
         _, jpeg_buf = cv2.imencode(".jpg", cropped, [cv2.IMWRITE_JPEG_QUALITY, 90])
         return Response(jpeg_buf.tobytes(), mimetype="image/jpeg")
+
+    @app.route("/video/<path:mp4_path>")
+    def serve_video(mp4_path: str) -> Response | tuple[str, int]:
+        """Serve an MP4 video file with range request support."""
+        video_path = Path("output") / mp4_path
+        if not video_path.exists():
+            return "Video not found", 404
+        return send_file(video_path.resolve(), mimetype="video/mp4", conditional=True)
 
     @app.route("/submit", methods=["POST"])
     def submit() -> Response:

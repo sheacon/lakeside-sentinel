@@ -50,6 +50,12 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center; }
 .modal-overlay.show { display: flex; }
 .modal-overlay img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+.btn-video { padding: 2px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8em; font-weight: 600; background: #f8fafc; color: #475569; cursor: pointer; }
+.btn-video:hover { background: #e2e8f0; }
+.btn-video.active { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.video-player { display: none; margin-bottom: 8px; }
+.video-player.show { display: block; }
+.video-player video { width: 100%; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -87,9 +93,13 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
     <div class="badges">
       {% if group.has_confirmed %}<span class="badge badge-confirmed">Confirmed</span>{% endif %}
       <span class="badge badge-count">{{ group.detections | length }} det.</span>
+      <button class="btn-video" id="btn-video-{{ loop.index0 }}" onclick="event.stopPropagation(); toggleVideoPlayer('{{ loop.index0 }}', '{{ group.mp4_filename }}')">Watch Video</button>
     </div>
   </div>
   <div class="video-content" id="video-content-{{ loop.index0 }}">
+    <div class="video-player" id="video-player-{{ loop.index0 }}">
+      <video controls preload="none" id="video-el-{{ loop.index0 }}"></video>
+    </div>
     {% for det in group.detections %}
     <div class="card" id="card-{{ det.id }}">
       <input type="checkbox"
@@ -225,6 +235,24 @@ function toggleVideo(idx) {
   const arrow = document.getElementById('arrow-video-' + idx);
   content.classList.toggle('hidden');
   header.classList.toggle('collapsed');
+}
+
+function toggleVideoPlayer(idx, mp4Filename) {
+  const player = document.getElementById('video-player-' + idx);
+  const video = document.getElementById('video-el-' + idx);
+  const btn = document.getElementById('btn-video-' + idx);
+  const isVisible = player.classList.contains('show');
+  if (isVisible) {
+    player.classList.remove('show');
+    btn.classList.remove('active');
+    video.pause();
+  } else {
+    if (!video.src || video.src === window.location.href) {
+      video.src = '/video/' + mp4Filename;
+    }
+    player.classList.add('show');
+    btn.classList.add('active');
+  }
 }
 
 function showModal(src) {

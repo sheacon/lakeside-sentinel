@@ -164,6 +164,35 @@ class TestServeFrame:
         assert resp.status_code == 404
 
 
+class TestServeVideo:
+    def test_serves_mp4(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        video_dir = tmp_path / "output" / "video"
+        video_dir.mkdir(parents=True)
+        video_file = video_dir / "2026-03-06_12-00-00.mp4"
+        video_file.write_bytes(b"\x00\x00\x00\x1cftypisom")  # minimal MP4 header
+
+        app = _create_app()
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        resp = client.get("/video/video/2026-03-06_12-00-00.mp4")
+        assert resp.status_code == 200
+        assert resp.content_type == "video/mp4"
+
+    def test_missing_video_returns_404(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        app = _create_app()
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        resp = client.get("/video/video/nonexistent.mp4")
+        assert resp.status_code == 404
+
+
 class TestSortDetections:
     def test_confirmed_before_debug(self) -> None:
         detections = [
