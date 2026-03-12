@@ -25,15 +25,26 @@ from lakeside_sentinel.utils.daylight import (
 from lakeside_sentinel.utils.image import crop_to_roi
 from lakeside_sentinel.utils.video import extract_frames
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
-
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
+# Configure root logger explicitly — logging.basicConfig() is a no-op when
+# a library (glocaltokens) has already added handlers during import.
+_root = logging.getLogger()
+_root.setLevel(logging.INFO)
+if not any(
+    isinstance(h, logging.StreamHandler) and h.stream.name == "<stderr>"
+    for h in _root.handlers
+):
+    _console = logging.StreamHandler()
+    _console.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+    _root.addHandler(_console)
+else:
+    for h in _root.handlers:
+        if isinstance(h, logging.StreamHandler):
+            h.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
+
+logger = logging.getLogger(__name__)
 _CLEANUP_MAX_AGE_DAYS = 14
 _SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
