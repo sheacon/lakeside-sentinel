@@ -36,9 +36,7 @@ src/lakeside_sentinel/
 ## Setup
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --group dev
 cp .env.example .env  # then fill in credentials
 ```
 
@@ -53,8 +51,8 @@ Output files:
 - `output/logs/{timestamp}.log` — timestamped log file with full logging output (created each run)
 
 ```bash
-python -m lakeside_sentinel                    # backfill up to 14 days
-python -m lakeside_sentinel --date 2026-02-28  # specific date only
+uv run python -m lakeside_sentinel                    # backfill up to 14 days
+uv run python -m lakeside_sentinel --date 2026-02-28  # specific date only
 ```
 
 ### Review mode
@@ -62,7 +60,7 @@ python -m lakeside_sentinel --date 2026-02-28  # specific date only
 Launches a local Flask web app for already-staged detection data. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations.
 
 ```bash
-python -m lakeside_sentinel --review           # review all staged data
+uv run python -m lakeside_sentinel --review           # review all staged data
 ```
 
 Output files:
@@ -77,12 +75,12 @@ Output files:
 Runs a single detector with full diagnostic output (confidence scores, class names, Claude badges).
 
 ```bash
-python -m lakeside_sentinel --veh                      # VEH detection
-python -m lakeside_sentinel --veh --date 2026-02-28    # VEH for a specific date
-python -m lakeside_sentinel --veh --claude             # VEH with Claude verification
-python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected
-python -m lakeside_sentinel --hsp                      # HSP detection
-python -m lakeside_sentinel --hsp --claude             # HSP with Claude verification
+uv run python -m lakeside_sentinel --veh                      # VEH detection
+uv run python -m lakeside_sentinel --veh --date 2026-02-28    # VEH for a specific date
+uv run python -m lakeside_sentinel --veh --claude             # VEH with Claude verification
+uv run python -m lakeside_sentinel --veh --claude --claude-keep-rejected  # keep rejected
+uv run python -m lakeside_sentinel --hsp                      # HSP detection
+uv run python -m lakeside_sentinel --hsp --claude             # HSP with Claude verification
 ```
 
 ### Verbose mode
@@ -90,12 +88,12 @@ python -m lakeside_sentinel --hsp --claude             # HSP with Claude verific
 Add `--verbose` to any mode for DEBUG-level logging output.
 
 ```bash
-python -m lakeside_sentinel --verbose                  # default mode + DEBUG logging
-python -m lakeside_sentinel --review --verbose         # review mode + DEBUG logging
-python -m lakeside_sentinel --veh --verbose            # single detector + DEBUG logging
+uv run python -m lakeside_sentinel --verbose                  # default mode + DEBUG logging
+uv run python -m lakeside_sentinel --review --verbose         # review mode + DEBUG logging
+uv run python -m lakeside_sentinel --veh --verbose            # single detector + DEBUG logging
 ```
 
-Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd that runs default mode (process + stage). See README.md for scheduler examples.
+Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd that uses `uv run` for default mode (process + stage). See README.md for scheduler examples.
 
 ### Auto-cleanup
 
@@ -112,7 +110,7 @@ Before staging cleanup, a warning email is sent if any unreviewed staging direct
 
 ```bash
 # VEH mode — sweep models, FPS, and confidence thresholds
-python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
+uv run python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --model yolo_models/yolo26s.pt yolo_models/yolo26m.pt \
     --fps 2 4 8 \
     --confidence 0.3 0.4 0.5 \
@@ -120,7 +118,7 @@ python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --roi-x-start 0.33 --roi-x-end 1.0
 
 # HSP mode — sweep displacement thresholds (px/sec) and person confidence
-python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
+uv run python scripts/tune_detection.py --clip output/video/2026-02-28_12-31-14.mp4 \
     --hsp \
     --fps 4 8 \
     --hsp-displacement 160.0 240.0 320.0 \
@@ -136,13 +134,13 @@ Annotated images are saved to `output/tune/{clip_stem}/`. Results are printed as
 
 ```bash
 # Default: 3 runs at temperature=0
-python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
+uv run python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
 
 # 5 runs, save crop images
-python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --runs 5 --save-crops
+uv run python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --runs 5 --save-crops
 
 # Compare with stochastic temperature
-python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --temperature 1.0
+uv run python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4 --temperature 1.0
 ```
 
 Crop images are saved to `output/verification/{clip_stem}/` when `--save-crops` is used.
@@ -153,18 +151,18 @@ Crop images are saved to `output/verification/{clip_stem}/` when `--save-crops` 
 
 ```bash
 # Default settings
-python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
+uv run python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
 
 # Multiple clips with overrides
-python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
+uv run python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
 
 # Multi-value sweep (2x3 = 6 runs per clip)
-python scripts/visualize_tracks.py --clip clip.mp4 \
+uv run python scripts/visualize_tracks.py --clip clip.mp4 \
     --max-match-distance 400.0 800.0 \
     --displacement 120.0 240.0 320.0
 
 # With ROI and confidence override
-python scripts/visualize_tracks.py --clip clip.mp4 \
+uv run python scripts/visualize_tracks.py --clip clip.mp4 \
     --person-confidence 0.3 --roi-y-start 0.0 --roi-y-end 0.28
 ```
 
@@ -175,8 +173,8 @@ Output directory: `output/tracks/{clip_stem}/` (single run) or `output/tracks/{c
 ## Testing
 
 ```bash
-pytest tests/                    # tests across 17 modules
-pytest tests/ -v --cov=src/lakeside_sentinel
+uv run pytest tests/                    # tests across 17 modules
+uv run pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 
 Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixtures in `tests/fixtures/`.
@@ -184,9 +182,9 @@ Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixture
 ## Code Quality
 
 ```bash
-ruff check .    # lint (E, F, I rules)
-ruff format .   # format (100 char line length)
-mypy .          # type checking
+uv run ruff check .    # lint (E, F, I rules)
+uv run ruff format .   # format (100 char line length)
+uv run mypy .          # type checking
 ```
 
 ## Environment Variables

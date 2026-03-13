@@ -2,6 +2,7 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 
 from lakeside_sentinel.detection.claude_verifier import DEFAULT_PROMPT, ClaudeVerifier
 from lakeside_sentinel.detection.models import Detection
@@ -134,7 +135,7 @@ class TestVerifyDetection:
 
     @patch("lakeside_sentinel.detection.claude_verifier.anthropic.Anthropic")
     def test_logs_raw_response(
-        self, mock_anthropic_cls: MagicMock, caplog: logging.LogCaptureFixture
+        self, mock_anthropic_cls: MagicMock, caplog: pytest.LogCaptureFixture
     ) -> None:
         mock_client = mock_anthropic_cls.return_value
         mock_client.messages.create.return_value = _mock_response("yes")

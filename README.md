@@ -36,9 +36,7 @@ src/lakeside_sentinel/
 ## Setup
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --group dev
 cp .env.example .env  # then fill in credentials
 ```
 
@@ -49,8 +47,8 @@ cp .env.example .env  # then fill in credentials
 Runs both VEH + HSP detection with Claude verification, then stages results for review. Backfills up to 14 days of missed dates. No reports generated, no email sent. Requires `ANTHROPIC_API_KEY`.
 
 ```bash
-python -m lakeside_sentinel                    # backfill up to 14 days
-python -m lakeside_sentinel --date 2026-02-28  # specific date only
+uv run python -m lakeside_sentinel                    # backfill up to 14 days
+uv run python -m lakeside_sentinel --date 2026-02-28  # specific date only
 ```
 
 ### Review mode
@@ -58,7 +56,7 @@ python -m lakeside_sentinel --date 2026-02-28  # specific date only
 Launches a local Flask web app for already-staged detection data. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations.
 
 ```bash
-python -m lakeside_sentinel --review           # review all staged data
+uv run python -m lakeside_sentinel --review           # review all staged data
 ```
 
 ### Debug mode
@@ -66,17 +64,17 @@ python -m lakeside_sentinel --review           # review all staged data
 Runs a single detector with full diagnostic output (confidence scores, class names, Claude badges).
 
 ```bash
-python -m lakeside_sentinel --debug --veh              # VEH detection
-python -m lakeside_sentinel --debug --veh --date 2026-02-28  # VEH for a specific date
-python -m lakeside_sentinel --debug --veh --claude     # VEH with Claude verification
-python -m lakeside_sentinel --debug --veh --claude --claude-keep-rejected  # keep rejected
-python -m lakeside_sentinel --debug --hsp              # HSP detection
-python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verification
+uv run python -m lakeside_sentinel --debug --veh              # VEH detection
+uv run python -m lakeside_sentinel --debug --veh --date 2026-02-28  # VEH for a specific date
+uv run python -m lakeside_sentinel --debug --veh --claude     # VEH with Claude verification
+uv run python -m lakeside_sentinel --debug --veh --claude --claude-keep-rejected  # keep rejected
+uv run python -m lakeside_sentinel --debug --hsp              # HSP detection
+uv run python -m lakeside_sentinel --debug --hsp --claude     # HSP with Claude verification
 ```
 
 ## Scheduling
 
-The repo includes `run.sh`, a self-locating entry point that activates the virtualenv and runs default mode (process + stage). Hook it into your preferred scheduler:
+The repo includes `run.sh`, a self-locating entry point that uses `uv run` to run default mode (process + stage). Hook it into your preferred scheduler:
 
 **cron** (daily at 21:00):
 ```bash
@@ -136,10 +134,10 @@ WantedBy=timers.target
 Render HSP person tracks as an annotated video and static summary image. Fast tracks (above threshold) are red, slow tracks are green. Multi-value flags create a Cartesian product sweep:
 
 ```bash
-python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
-python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
-python scripts/visualize_tracks.py --clip clip.mp4 --person-confidence 0.3
-python scripts/visualize_tracks.py --clip clip.mp4 --max-match-distance 400.0 800.0
+uv run python scripts/visualize_tracks.py --clip output/video/2026-03-01_16-44-19.mp4
+uv run python scripts/visualize_tracks.py --clip a.mp4 b.mp4 --fps 8 --displacement 320.0
+uv run python scripts/visualize_tracks.py --clip clip.mp4 --person-confidence 0.3
+uv run python scripts/visualize_tracks.py --clip clip.mp4 --max-match-distance 400.0 800.0
 ```
 
 Output saved to `output/tracks/{clip_stem}/` (single run) or `output/tracks/{clip_stem}/{param_label}/` (sweep).
@@ -149,16 +147,16 @@ Output saved to `output/tracks/{clip_stem}/` (single run) or `output/tracks/{cli
 Test Claude Vision verification against a video clip to measure consistency and debug rejections:
 
 ```bash
-python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
-python scripts/test_verification.py --clip output/video/clip.mp4 --runs 5 --save-crops
-python scripts/test_verification.py --clip output/video/clip.mp4 --temperature 1.0
+uv run python scripts/test_verification.py --clip output/video/2026-03-01_16-44-19.mp4
+uv run python scripts/test_verification.py --clip output/video/clip.mp4 --runs 5 --save-crops
+uv run python scripts/test_verification.py --clip output/video/clip.mp4 --temperature 1.0
 ```
 
 ## Testing
 
 ```bash
-pytest tests/
-pytest tests/ -v --cov=src/lakeside_sentinel
+uv run pytest tests/
+uv run pytest tests/ -v --cov=src/lakeside_sentinel
 ```
 
 Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixtures in `tests/fixtures/`.
@@ -166,9 +164,9 @@ Tests use mocks for all external services (YOLO, Resend, Nest API). Test fixture
 ## Code Quality
 
 ```bash
-ruff check .    # lint (E, F, I rules)
-ruff format .   # format (100 char line length)
-mypy .          # type checking
+uv run ruff check .    # lint (E, F, I rules)
+uv run ruff format .   # format (100 char line length)
+uv run mypy .          # type checking
 ```
 
 ## Environment Variables
