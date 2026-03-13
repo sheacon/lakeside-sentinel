@@ -17,6 +17,7 @@ from lakeside_sentinel.detection.models import Detection
 from lakeside_sentinel.detection.veh_detector import VEHDetector
 from lakeside_sentinel.notification.email_sender import EmailSender
 from lakeside_sentinel.notification.html_report import ClipReport, generate_report
+from lakeside_sentinel.review.staging import discover_unreviewed, load_staged_detections
 from lakeside_sentinel.utils.daylight import (
     get_daylight_span,
     get_daylight_span_for_date,
@@ -45,6 +46,7 @@ else:
 
 logger = logging.getLogger(__name__)
 _CLEANUP_MAX_AGE_DAYS = 14
+_EXPIRY_WARNING_DAYS = 3
 _SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
 
@@ -83,6 +85,68 @@ def _cleanup_old_dirs(directory: Path, max_age_days: int) -> None:
         if dirpath.is_dir() and dirpath.stat().st_mtime < cutoff:
             shutil.rmtree(dirpath)
             logger.info("Cleaned up old directory: %s", dirpath)
+
+
+def _warn_expiring_staging(
+    staging_dir: Path,
+    max_age_days: int,
+    warning_days: int,
+    email_sender: EmailSender,
+) -> None:
+    """Send a warning email when unreviewed staging data is close to auto-deletion."""
+    if not staging_dir.exists():
+        return
+
+    unreviewed = discover_unreviewed()
+    if not unreviewed:
+        return
+
+    now = time.time()
+    expiring: list[tuple[Path, int, int]] = []  # (dir, detection_count, days_remaining)
+
+    for d in unreviewed:
+        age_seconds = now - d.stat().st_mtime
+        age_days = int(age_seconds / 86400)
+        days_remaining = max_age_days - age_days
+        if days_remaining <= warning_days:
+            try:
+                data = load_staged_detections(d)
+                det_count = len(data.get("detections", []))
+            except Exception:
+                logger.warning("Failed to read staging data from %s", d)
+                det_count = 0
+            expiring.append((d, det_count, days_remaining))
+
+    if not expiring:
+        return
+
+    rows = ""
+    for d, det_count, days_rem in expiring:
+        date_str = d.name
+        rows += (
+            f"<tr>"
+            f"<td style='padding:4px 12px'>{date_str}</td>"
+            f"<td style='padding:4px 12px'>{det_count}</td>"
+            f"<td style='padding:4px 12px'>{days_rem}</td>"
+            f"</tr>"
+        )
+
+    html = (
+        "<html><body>"
+        "<h2>Unreviewed staging data expiring soon</h2>"
+        "<p>The following staged detections will be auto-deleted if not reviewed:</p>"
+        "<table border='1' cellpadding='4' cellspacing='0'>"
+        "<tr><th>Date</th><th>Detections</th><th>Days remaining</th></tr>"
+        f"{rows}"
+        "</table>"
+        "<p>Run <code>python -m lakeside_sentinel --review</code> to review.</p>"
+        "</body></html>"
+    )
+
+    dates_str = ", ".join(d.name for d, _, _ in expiring)
+    subject = f"Lakeside Sentinel: staging data expiring soon ({dates_str})"
+    email_sender.send_report(html, subject)
+    logger.info("Sent expiry warning email for %d staging dir(s)", len(expiring))
 
 
 def _print_settings(settings: Settings) -> None:
@@ -1123,6 +1187,16 @@ def main() -> None:
     _setup_file_logging()
     _cleanup_old_files(Path("output") / "logs", ".log", _CLEANUP_MAX_AGE_DAYS)
     _cleanup_old_files(Path("output") / "video", ".mp4", _CLEANUP_MAX_AGE_DAYS)
+    _warn_expiring_staging(
+        Path("output") / "staging",
+        _CLEANUP_MAX_AGE_DAYS,
+        _EXPIRY_WARNING_DAYS,
+        EmailSender(
+            api_key=settings.resend_api_key,
+            from_email=settings.alert_email_from,
+            to_email=settings.alert_email_to,
+        ),
+    )
     _cleanup_old_dirs(Path("output") / "staging", _CLEANUP_MAX_AGE_DAYS)
 
     target_date: date | None = None

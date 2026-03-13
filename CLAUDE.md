@@ -104,6 +104,8 @@ On each run, files older than 14 days are automatically deleted from:
 - `output/video/*.mp4` — video clips
 - `output/staging/*/` — staging directories
 
+Before staging cleanup, a warning email is sent if any unreviewed staging directories are within 3 days of deletion. The email lists dates, detection counts, and days remaining.
+
 ## Tuning
 
 `scripts/tune_detection.py` sweeps detection parameters on a video clip via CLI flags. Multi-value flags create a Cartesian product sweep.

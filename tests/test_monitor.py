@@ -10,7 +10,14 @@ import pytest
 from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.config import Settings
 from lakeside_sentinel.detection.models import Detection
-from lakeside_sentinel.main import Monitor, _cleanup_old_files, _print_settings, _setup_file_logging
+from lakeside_sentinel.main import (
+    Monitor,
+    _cleanup_old_files,
+    _print_settings,
+    _setup_file_logging,
+    _warn_expiring_staging,
+)
+from lakeside_sentinel.notification.email_sender import EmailSender
 
 
 def _make_event(hour: int = 12) -> CameraEvent:
@@ -880,3 +887,129 @@ class TestFileLogging:
 
     def test_cleanup_old_files_nonexistent_directory(self) -> None:
         _cleanup_old_files(Path("/nonexistent/directory"), ".log", 7)
+
+
+class TestExpiryWarning:
+    def _create_staging_dir(
+        self, tmp_path: Path, date_str: str, age_days: int, det_count: int = 3
+    ) -> Path:
+        """Create a staging dir with staging.json and set its mtime."""
+        import json
+        import os
+
+        staging_dir = tmp_path / "output" / "staging" / date_str
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        detections = [{"id": f"det_{i}"} for i in range(det_count)]
+        (staging_dir / "staging.json").write_text(
+            json.dumps({"date_str": date_str, "detections": detections})
+        )
+        old_mtime = time.time() - (age_days * 86400)
+        os.utime(staging_dir, (old_mtime, old_mtime))
+        return staging_dir
+
+    @patch.object(EmailSender, "send_report", return_value="email-id-123")
+    def test_sends_email_for_expiring_staging(
+        self,
+        mock_send: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._create_staging_dir(tmp_path, "2026-02-28", age_days=12, det_count=5)
+
+        sender = EmailSender(api_key="test", from_email="from@test.com", to_email="to@test.com")
+        _warn_expiring_staging(
+            tmp_path / "output" / "staging",
+            max_age_days=14,
+            warning_days=3,
+            email_sender=sender,
+        )
+
+        mock_send.assert_called_once()
+        html = mock_send.call_args[0][0]
+        assert "2026-02-28" in html
+        assert "5" in html
+        assert "2" in html  # days remaining: 14 - 12 = 2
+
+    @patch.object(EmailSender, "send_report", return_value="email-id-123")
+    def test_skips_fresh_staging(
+        self,
+        mock_send: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._create_staging_dir(tmp_path, "2026-03-10", age_days=2, det_count=3)
+
+        sender = EmailSender(api_key="test", from_email="from@test.com", to_email="to@test.com")
+        _warn_expiring_staging(
+            tmp_path / "output" / "staging",
+            max_age_days=14,
+            warning_days=3,
+            email_sender=sender,
+        )
+
+        mock_send.assert_not_called()
+
+    @patch.object(EmailSender, "send_report", return_value="email-id-123")
+    def test_skips_nonexistent_dir(
+        self,
+        mock_send: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        sender = EmailSender(api_key="test", from_email="from@test.com", to_email="to@test.com")
+        _warn_expiring_staging(
+            tmp_path / "nonexistent" / "staging",
+            max_age_days=14,
+            warning_days=3,
+            email_sender=sender,
+        )
+
+        mock_send.assert_not_called()
+
+    @patch.object(EmailSender, "send_report", return_value="email-id-123")
+    def test_skips_dirs_without_staging_json(
+        self,
+        mock_send: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        # Create dir without staging.json
+        staging_dir = tmp_path / "output" / "staging" / "2026-02-28"
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        import os
+
+        old_mtime = time.time() - (12 * 86400)
+        os.utime(staging_dir, (old_mtime, old_mtime))
+
+        sender = EmailSender(api_key="test", from_email="from@test.com", to_email="to@test.com")
+        _warn_expiring_staging(
+            tmp_path / "output" / "staging",
+            max_age_days=14,
+            warning_days=3,
+            email_sender=sender,
+        )
+
+        mock_send.assert_not_called()
+
+    @patch.object(EmailSender, "send_report", return_value=None)
+    def test_handles_email_failure(
+        self,
+        mock_send: MagicMock,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        self._create_staging_dir(tmp_path, "2026-02-28", age_days=12, det_count=2)
+
+        sender = EmailSender(api_key="test", from_email="from@test.com", to_email="to@test.com")
+        _warn_expiring_staging(
+            tmp_path / "output" / "staging",
+            max_age_days=14,
+            warning_days=3,
+            email_sender=sender,
+        )
+
+        mock_send.assert_called_once()
+        # No exception raised
