@@ -33,8 +33,7 @@ _LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _root = logging.getLogger()
 _root.setLevel(logging.INFO)
 if not any(
-    isinstance(h, logging.StreamHandler) and h.stream.name == "<stderr>"
-    for h in _root.handlers
+    isinstance(h, logging.StreamHandler) and h.stream.name == "<stderr>" for h in _root.handlers
 ):
     _console = logging.StreamHandler()
     _console.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATEFMT))
@@ -630,7 +629,7 @@ class Monitor:
         now_str = datetime.now().strftime("%H:%M:%S")
         logger.info("")
         logger.info("%s Generating HTML report... (%s)", step_label, now_str)
-        settings_dict = self._settings.model_dump() if mode != "present" else None
+        settings_dict = self._settings.model_dump() if mode != "default" else None
         html, _ = generate_report(
             clip_reports,
             crop_padding=self._settings.crop_padding,
@@ -642,7 +641,7 @@ class Monitor:
             total_clips=total_clips,
         )
 
-        if mode == "present":
+        if mode == "default":
             report_path = Path("output") / f"report-{date_str}.html"
         else:
             report_path = Path("output") / f"report-{mode}-{date_str}.html"
@@ -814,91 +813,12 @@ class Monitor:
 
     # ── Public run methods ───────────────────────────────────────────
 
-    def run_present(
+    def run(
         self,
         target_date: date | None = None,
     ) -> None:
-        """Present mode: run both VEH + HSP with Claude verification."""
-        start, end, label = self._resolve_daylight_span(target_date, "DETECTION REPORT")
-
-        if target_date is not None:
-            date_str = target_date.isoformat()
-        else:
-            date_str = start.astimezone().strftime("%Y-%m-%d")
-
-        events = self._fetch_events(start, end, step_label="[1/5]")
-        if not events:
-            logger.info("No events to process.")
-            return
-
-        clips, total_mb = self._download_clips(events, step_label="[2/5]")
-
-        veh_reports, veh_count, veh_frames, veh_debug_reports = self._detect_veh(
-            clips, events, step_label="[3/5]"
-        )
-        hsp_reports, hsp_count, hsp_frames, hsp_debug_reports = self._detect_hsp(
-            clips, events, step_label="[3/5]"
-        )
-
-        merged_reports = self._merge_clip_reports(veh_reports, hsp_reports)
-
-        merged_reports, detection_count = self._verify_with_claude(
-            merged_reports, False, step_label="[4/5]"
-        )
-
-        report_path, email_id = self._generate_and_send_report(
-            merged_reports,
-            date_str,
-            "present",
-            "Motorized Vehicle Detection Report",
-            True,
-            subtitle=date_str,
-            step_label="[5/5]",
-        )
-
-        veh_debug_path = self._write_debug_report(
-            veh_debug_reports, date_str, "veh", "VEH Detection Report"
-        )
-        hsp_debug_path = self._write_debug_report(
-            hsp_debug_reports, date_str, "hsp", "HSP Detection Report"
-        )
-
-        logger.info("")
-        logger.info("=" * 60)
-        logger.info("  DETECTION COMPLETE")
-        logger.info("  Events:     %d", len(events))
-        logger.info("  Downloaded: %d clips (%.1f MB)", len(clips), total_mb)
-        logger.info("  Frames:     %d VEH + %d HSP analyzed", veh_frames, hsp_frames)
-        logger.info("  Detections: %d", detection_count)
-        logger.info("  Report:     %s", report_path.resolve())
-        logger.info("  VEH debug:  %s", veh_debug_path.resolve())
-        logger.info("  HSP debug:  %s", hsp_debug_path.resolve())
-        logger.info("  Email:      %s", "sent" if email_id else "failed")
-        dump_dir = Path("output") / "video"
-        logger.info("  Clips:      %s", dump_dir.resolve())
-        logger.info("=" * 60)
-        logger.info("")
-
-    def run_review(
-        self,
-        target_date: date | None = None,
-        review_port: int = 5000,
-    ) -> None:
-        """Review mode: detect, stage, and launch web app for human review."""
-        from lakeside_sentinel.review.fine_tuning import (
-            ensure_data_yaml,
-            save_annotation,
-            save_other,
-        )
-        from lakeside_sentinel.review.server import run_review_server
-        from lakeside_sentinel.review.staging import (
-            cleanup_staging,
-            discover_unreviewed,
-            load_frame,
-            load_staged_detections,
-            rebuild_clip_reports,
-            stage_detections,
-        )
+        """Default mode: run detection pipeline and stage results for review."""
+        from lakeside_sentinel.review.staging import stage_detections
 
         # Determine which dates need analysis
         if target_date is not None:
@@ -914,13 +834,17 @@ class Monitor:
             logger.info("Dates needing analysis: %s", [d.isoformat() for d in dates_to_analyze])
         else:
             logger.info("No new dates to analyze.")
+            return
 
-        # Run detection pipeline for each date and stage results
+        staged_count = 0
+        skipped_count = 0
+
         for d in dates_to_analyze:
             date_str = d.isoformat()
             staging_dir = Path("output") / "staging" / date_str
             if staging_dir.exists():
                 logger.info("Staging data already exists for %s, skipping.", date_str)
+                skipped_count += 1
                 continue
 
             result = self._run_detection_pipeline(d)
@@ -936,6 +860,34 @@ class Monitor:
                 self._settings.crop_padding,
                 total_clips=len(clips),
             )
+            staged_count += 1
+
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("  DETECTION COMPLETE")
+        logger.info("  Dates processed: %d", staged_count)
+        logger.info("  Dates skipped:   %d", skipped_count)
+        logger.info("=" * 60)
+        logger.info("")
+
+    def run_review(
+        self,
+        review_port: int = 5000,
+    ) -> None:
+        """Review mode: launch web app for already-staged data."""
+        from lakeside_sentinel.review.fine_tuning import (
+            ensure_data_yaml,
+            save_annotation,
+            save_other,
+        )
+        from lakeside_sentinel.review.server import run_review_server
+        from lakeside_sentinel.review.staging import (
+            cleanup_staging,
+            discover_unreviewed,
+            load_frame,
+            load_staged_detections,
+            rebuild_clip_reports,
+        )
 
         # Check if there's anything to review
         unreviewed = discover_unreviewed()
@@ -999,7 +951,7 @@ class Monitor:
             report_path, _ = self._generate_and_send_report(
                 clip_reports,
                 date_str,
-                "present",
+                "default",
                 "Motorized Vehicle Detection Report",
                 False,
                 subtitle=date_str,
@@ -1024,7 +976,7 @@ class Monitor:
                 crop_padding=self._settings.crop_padding,
                 include_video=False,
                 title=f"Detection Report — {date_str}",
-                mode="present",
+                mode="default",
                 subtitle=date_str,
                 for_email=True,
                 total_clips=stored_total_clips,
@@ -1201,24 +1153,19 @@ def main() -> None:
                 claude_keep_rejected=args.claude_keep_rejected,
             )
     elif args.review:
-        # Review mode
-        if not settings.anthropic_api_key:
-            logger.error("Review mode requires ANTHROPIC_API_KEY to be set in .env")
-            raise SystemExit(1)
-
+        # Review mode — launches web app for already-staged data
         monitor = Monitor(settings)
         monitor.run_review(
-            target_date=target_date,
             review_port=settings.review_port,
         )
     else:
-        # Present mode (default)
+        # Default mode — process + stage
         if not settings.anthropic_api_key:
-            logger.error("Present mode requires ANTHROPIC_API_KEY to be set in .env")
+            logger.error("Default mode requires ANTHROPIC_API_KEY to be set in .env")
             raise SystemExit(1)
 
         monitor = Monitor(settings)
-        monitor.run_present(
+        monitor.run(
             target_date=target_date,
         )
 

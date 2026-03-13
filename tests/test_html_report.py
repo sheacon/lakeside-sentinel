@@ -252,7 +252,7 @@ class TestGenerateReport:
         assert "2 clips analysed" in html
 
 
-class TestPresentModeReport:
+class TestDefaultModeReport:
     def test_sorted_chronologically(self) -> None:
         early = _make_detection("Motorcycle", 0.9)
         late = _make_detection("Motorcycle", 0.3)
@@ -260,7 +260,7 @@ class TestPresentModeReport:
             _make_clip_report(hour=14, best=late, class_detections={"Motorcycle": late}),
             _make_clip_report(hour=10, best=early, class_detections={"Motorcycle": early}),
         ]
-        html, _ = generate_report(reports, mode="present")
+        html, _ = generate_report(reports, mode="default")
         # Times display in local time; get the expected local time strings
         early_time = datetime(2026, 2, 28, 10, 0, 0, tzinfo=timezone.utc)
         late_time = datetime(2026, 2, 28, 14, 0, 0, tzinfo=timezone.utc)
@@ -273,7 +273,7 @@ class TestPresentModeReport:
     def test_sort_label_says_chronologically(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         reports = [_make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})]
-        html, _ = generate_report(reports, mode="present")
+        html, _ = generate_report(reports, mode="default")
         assert "sorted chronologically" in html
         assert "sorted by motorcycle confidence" not in html
 
@@ -285,7 +285,7 @@ class TestPresentModeReport:
             best=moto,
             class_detections={"Motorcycle": moto, "HSP": hsp},
         )
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "Potential Motorized Vehicle" in html
         assert ">Motorcycle<" not in html
         assert ">HSP<" not in html
@@ -293,13 +293,13 @@ class TestPresentModeReport:
     def test_hides_confidence_percentages(self) -> None:
         det = _make_detection("Motorcycle", 0.85)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "85%" not in html
 
     def test_hides_speed_metrics(self) -> None:
         det = _make_detection("HSP", 0.5, speed=320.0)
         report = _make_clip_report(hour=10, best=det, class_detections={"HSP": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "px/sec" not in html
 
     def test_hides_claude_badges(self) -> None:
@@ -307,7 +307,7 @@ class TestPresentModeReport:
         det.verification_status = "confirmed"
         det.verification_response = "yes this is a motorcycle"
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "Claude verified" not in html
         assert "Claude rejected" not in html
         assert "Claude:" not in html
@@ -315,7 +315,7 @@ class TestPresentModeReport:
     def test_best_detection_shows_generic_label(self) -> None:
         det = _make_detection("Motorcycle", 0.9)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         # Best detection summary should show generic label, not class name
         assert "Potential Motorized Vehicle" in html
 
@@ -323,14 +323,14 @@ class TestPresentModeReport:
         det = _make_detection("Motorcycle", 0.5)
         # Create a report where best_detection is None but has class_detections
         report = _make_clip_report(hour=10, best=None, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "No detection" in html
         assert "No detection above threshold" not in html
 
     def test_shows_cropped_images(self) -> None:
         det = _make_detection("Motorcycle", 0.85)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "data:image/png;base64," in html
 
     def test_mixed_veh_and_hsp_in_one_clip(self) -> None:
@@ -341,7 +341,7 @@ class TestPresentModeReport:
             best=moto,
             class_detections={"Motorcycle": moto, "HSP": hsp},
         )
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         # Should have two cards, both labeled "Potential Motorized Vehicle"
         assert html.count("Potential Motorized Vehicle") >= 2
 
@@ -349,7 +349,7 @@ class TestPresentModeReport:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
         settings = {"yolo_model": "yolo_models/yolo26s.pt", "veh_confidence_threshold": 0.4}
-        html, _ = generate_report([report], mode="present", settings=settings)
+        html, _ = generate_report([report], mode="default", settings=settings)
         assert "Parameters" not in html
         assert "Yolo Model" not in html
 
@@ -412,7 +412,7 @@ class TestSubtitle:
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
         html, _ = generate_report(
             [report],
-            mode="present",
+            mode="default",
             title="Motorized Vehicle Detection Report",
             subtitle="2026-03-01",
         )
@@ -422,7 +422,7 @@ class TestSubtitle:
     def test_present_mode_card_dimensions(self) -> None:
         det = _make_detection("Motorcycle", 0.8)
         report = _make_clip_report(hour=10, best=det, class_detections={"Motorcycle": det})
-        html, _ = generate_report([report], mode="present")
+        html, _ = generate_report([report], mode="default")
         assert "width:320px" in html
         assert "max-width:288px" in html
 

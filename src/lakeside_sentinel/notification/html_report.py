@@ -15,7 +15,7 @@ from lakeside_sentinel.utils.image import crop_to_bbox
 
 logger = logging.getLogger(__name__)
 
-_PRESENT_LABEL = "Potential Motorized Vehicle"
+_DEFAULT_LABEL = "Potential Motorized Vehicle"
 _SENSITIVE_KEYWORDS = {"token", "key", "password", "secret"}
 
 
@@ -113,7 +113,7 @@ def generate_report(
         crop_padding: Padding fraction for cropping detection images.
         include_video: Whether to include video player elements.
         title: Title for the HTML report.
-        mode: Detection mode ("veh", "hsp", or "present"). Controls sorting and display.
+        mode: Detection mode ("veh", "hsp", or "default"). Controls sorting and display.
         settings: Optional settings dict to display in debug mode reports.
         subtitle: Optional subtitle shown below the title.
         for_email: When True, use CID inline attachments (JPEG) instead of base64 data URIs.
@@ -122,7 +122,7 @@ def generate_report(
         A tuple of (html_string, attachments) where attachments is a list of dicts
         for Resend CID attachments. Empty list when for_email is False.
     """
-    is_present = mode == "present"
+    is_default = mode == "default"
 
     # Filter out clips with no above-threshold detections
     filtered_reports = [r for r in clip_reports if r.class_detections]
@@ -135,7 +135,7 @@ def generate_report(
 
         filtered_reports.sort(key=_hsp_sort_key, reverse=True)
         sort_label = "sorted by speed"
-    elif is_present:
+    elif is_default:
         # Sort chronologically by event_time
         filtered_reports.sort(key=lambda r: r.event_time)
         sort_label = "sorted chronologically"
@@ -179,7 +179,7 @@ def generate_report(
                         det.frame,
                         det.bbox,
                         crop_padding,
-                        enhance=is_present,
+                        enhance=is_default,
                         for_email=True,
                         cid_index=cid_counter,
                     )
@@ -196,14 +196,14 @@ def generate_report(
                     cid_counter += 1
                 else:
                     result = _encode_cropped_png(
-                        det.frame, det.bbox, crop_padding, enhance=is_present
+                        det.frame, det.bbox, crop_padding, enhance=is_default
                     )
                     assert isinstance(result, str)
                     img_uri = result
 
-                if is_present:
+                if is_default:
                     # Present mode: generic label, no metrics, no Claude info
-                    display_name = _PRESENT_LABEL
+                    display_name = _DEFAULT_LABEL
                     metric_html = ""
                     badge_html = ""
                 else:
@@ -232,8 +232,8 @@ def generate_report(
                             f"Claude: &ldquo;{det.verification_response}&rdquo;</div>"
                         )
 
-                card_w = 320 if is_present else 160
-                img_max = 288 if is_present else 144
+                card_w = 320 if is_default else 160
+                img_max = 288 if is_default else 144
                 card_items.append(
                     f'<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;'
                     f'text-align:center;width:{card_w}px">'
@@ -253,8 +253,8 @@ def generate_report(
         # Best detection summary
         best_str = ""
         if report.best_detection:
-            if is_present:
-                best_str = f'<span style="color:#16a34a;font-weight:bold">{_PRESENT_LABEL}</span>'
+            if is_default:
+                best_str = f'<span style="color:#16a34a;font-weight:bold">{_DEFAULT_LABEL}</span>'
             else:
                 best_str = (
                     f'<span style="color:#16a34a;font-weight:bold">'
@@ -262,7 +262,7 @@ def generate_report(
                     f"({report.best_detection.confidence:.0%})</span>"
                 )
         else:
-            if is_present:
+            if is_default:
                 best_str = '<span style="color:#94a3b8">No detection</span>'
             else:
                 best_str = '<span style="color:#94a3b8">No detection above threshold</span>'
@@ -295,7 +295,7 @@ def generate_report(
         )
 
     settings_html = ""
-    if settings and not is_present:
+    if settings and not is_default:
         settings_html = _render_settings_html(settings)
 
     html = (

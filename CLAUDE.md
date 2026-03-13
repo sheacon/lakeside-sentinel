@@ -7,7 +7,7 @@ Vehicle detection and alert system that monitors a Google Nest camera using YOLO
 ```
 src/lakeside_sentinel/
 ├── main.py                # Monitor orchestration & run logic
-├── cli.py                 # CLI argument parser (present mode default, --review, --veh/--hsp, --verbose)
+├── cli.py                 # CLI argument parser (default mode, --review, --veh/--hsp, --verbose)
 ├── config.py              # Pydantic settings from .env
 ├── camera/
 │   ├── auth.py            # Google Nest auth via glocaltokens
@@ -20,7 +20,7 @@ src/lakeside_sentinel/
 │   └── veh_detector.py    # YOLO vehicle detection (classes 1,3), dynamic imgsz
 ├── notification/
 │   ├── email_sender.py    # Resend email: sends pre-built HTML report
-│   └── html_report.py     # Self-contained HTML report; mode-aware (present/veh/hsp)
+│   └── html_report.py     # Self-contained HTML report; mode-aware (default/veh/hsp)
 ├── review/
 │   ├── staging.py         # Serialize detections to disk for review web app
 │   ├── server.py          # Flask web app for human-in-the-loop review
@@ -44,32 +44,31 @@ cp .env.example .env  # then fill in credentials
 
 ## Running
 
-### Present mode (default)
+### Default mode
 
-Runs both VEH + HSP detection with Claude verification. Produces a clean report suitable for sharing (hides confidence scores, class names, and debug info), plus VEH and HSP debug reports with unfiltered detection data. Always sends email. Requires `ANTHROPIC_API_KEY`.
+Runs both VEH + HSP detection with Claude verification, then stages results for review. Backfills up to 14 days of missed dates. No reports generated, no email sent. Requires `ANTHROPIC_API_KEY`.
 
 Output files:
-- `output/report-{date}.html` — clean present report (opened in browser, emailed)
-- `output/report-veh-{date}.html` — VEH debug report with all class detections (not opened/emailed)
-- `output/report-hsp-{date}.html` — HSP debug report with fastest track regardless of threshold (not opened/emailed)
+- `output/staging/{date}/` — staged detection data (frames + JSON) awaiting review
 - `output/logs/{timestamp}.log` — timestamped log file with full logging output (created each run)
 
 ```bash
-python -m lakeside_sentinel                    # most recent daylight period
-python -m lakeside_sentinel --date 2026-02-28  # specific date
+python -m lakeside_sentinel                    # backfill up to 14 days
+python -m lakeside_sentinel --date 2026-02-28  # specific date only
 ```
 
 ### Review mode
 
-Launches a local Flask web app for human-in-the-loop review before sending reports. Backfills up to 14 days of missed detections. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations. Requires `ANTHROPIC_API_KEY`.
+Launches a local Flask web app for already-staged detection data. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations.
 
 ```bash
-python -m lakeside_sentinel --review                    # backfill + review all
-python -m lakeside_sentinel --review --date 2026-03-05  # analyze specific date + review
+python -m lakeside_sentinel --review           # review all staged data
 ```
 
 Output files:
-- `output/staging/{date}/` — staged detection data (frames + JSON) awaiting review
+- `output/report-{date}.html` — clean report (opened in browser)
+- `output/report-veh-{date}.html` — VEH debug report
+- `output/report-hsp-{date}.html` — HSP debug report
 - `output/fine-tuning/` — YOLO-format annotations (`images/train/`, `labels/train/`, `data.yaml`)
 - `output/fine-tuning/other/` — images classified as "other" for later manual review
 
@@ -91,12 +90,12 @@ python -m lakeside_sentinel --hsp --claude             # HSP with Claude verific
 Add `--verbose` to any mode for DEBUG-level logging output.
 
 ```bash
-python -m lakeside_sentinel --verbose                  # present mode + DEBUG logging
+python -m lakeside_sentinel --verbose                  # default mode + DEBUG logging
 python -m lakeside_sentinel --review --verbose         # review mode + DEBUG logging
 python -m lakeside_sentinel --veh --verbose            # single detector + DEBUG logging
 ```
 
-Scheduled via `run.sh` (passes `--review`) — a self-locating entry point for cron, launchd, or systemd. See README.md for scheduler examples.
+Scheduled via `run.sh` — a self-locating entry point for cron, launchd, or systemd that runs default mode (process + stage). See README.md for scheduler examples.
 
 ### Auto-cleanup
 
@@ -201,7 +200,7 @@ See `.env.example` for the full list. Key variables:
 - `VEH_FPS_SAMPLE` (default 2) - frames extracted per second for VEH mode
 - `HSP_FPS_SAMPLE` (default 4), `HSP_DISPLACEMENT_THRESHOLD` (default 240.0, px/sec) - high-speed person mode
 - `HSP_PERSON_CONFIDENCE_THRESHOLD` (default 0.4), `HSP_MAX_MATCH_DISTANCE` (default 800.0, px/sec) - HSP tracking (thresholds are FPS-invariant)
-- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for present mode, review mode, and `--veh/--hsp --claude`)
+- `ANTHROPIC_API_KEY` - API key for Claude Vision verification (required for default mode and `--veh/--hsp --claude`)
 - `CLAUDE_VISION_MODEL` (default `claude-sonnet-4-20250514`) - Claude model for verification (uses `temperature=0` for deterministic classification; raw response text shown in HTML report)
 - `CLAUDE_VISION_PROMPT` - Custom prompt for Claude Vision verification (defaults to built-in motorized vehicle prompt)
 - `REVIEW_PORT` (default 5000) - port for the review web app server
