@@ -8,6 +8,7 @@ from lakeside_sentinel.detection.models import Detection
 from lakeside_sentinel.notification.html_report import ClipReport
 from lakeside_sentinel.review.staging import (
     cleanup_staging,
+    cleanup_videos_for_date,
     discover_unreviewed,
     load_frame,
     load_staged_detections,
@@ -267,6 +268,41 @@ class TestCleanupStaging:
         assert staging_dir.exists()
         cleanup_staging(staging_dir)
         assert not staging_dir.exists()
+
+
+class TestCleanupVideosForDate:
+    def test_deletes_matching_videos(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        video_dir = tmp_path / "output" / "video"
+        video_dir.mkdir(parents=True)
+
+        # Create videos for the target date and another date
+        (video_dir / "2026-03-06_12-00-00.mp4").write_bytes(b"clip1")
+        (video_dir / "2026-03-06_14-30-00.mp4").write_bytes(b"clip2")
+        (video_dir / "2026-03-07_09-00-00.mp4").write_bytes(b"other")
+
+        cleanup_videos_for_date("2026-03-06")
+
+        assert not (video_dir / "2026-03-06_12-00-00.mp4").exists()
+        assert not (video_dir / "2026-03-06_14-30-00.mp4").exists()
+        assert (video_dir / "2026-03-07_09-00-00.mp4").exists()
+
+    def test_no_op_when_no_video_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        # Should not raise
+        cleanup_videos_for_date("2026-03-06")
+
+    def test_no_op_when_no_matching_videos(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        video_dir = tmp_path / "output" / "video"
+        video_dir.mkdir(parents=True)
+        (video_dir / "2026-03-07_09-00-00.mp4").write_bytes(b"other")
+
+        cleanup_videos_for_date("2026-03-06")
+
+        assert (video_dir / "2026-03-07_09-00-00.mp4").exists()
 
 
 class TestLoadFrame:

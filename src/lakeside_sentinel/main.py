@@ -947,6 +947,7 @@ class Monitor:
         from lakeside_sentinel.review.server import run_review_server
         from lakeside_sentinel.review.staging import (
             cleanup_staging,
+            cleanup_videos_for_date,
             discover_unreviewed,
             load_frame,
             load_staged_detections,
@@ -1050,8 +1051,9 @@ class Monitor:
             all_attachments.extend(email_attachments)
             cid_offset += len(email_attachments)
 
-            # Clean up staging
+            # Clean up staging and associated videos
             cleanup_staging(staging_dir)
+            cleanup_videos_for_date(date_str)
 
         # Send one combined email
         if all_present_htmls:
