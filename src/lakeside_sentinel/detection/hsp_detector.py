@@ -65,6 +65,7 @@ class HSPDetector:
 
     def __init__(
         self,
+        model: YOLO | None = None,
         model_name: str = "yolo_models/yolo26s.pt",
         person_confidence: float = 0.4,
         displacement_threshold: float = 240.0,
@@ -73,7 +74,9 @@ class HSPDetector:
         *,
         fps_sample: int,
     ) -> None:
-        self._model = YOLO(model_name)
+        # Accept either a pre-built YOLO instance (so VEH and HSP can share one)
+        # or fall back to loading from a path for standalone callers (scripts, tests).
+        self._model = model if model is not None else YOLO(model_name)
         self._person_confidence = person_confidence
         self._displacement_threshold = displacement_threshold
         self._max_match_distance = max_match_distance

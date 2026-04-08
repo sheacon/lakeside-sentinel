@@ -1,5 +1,6 @@
 import logging
 import time
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -39,6 +40,19 @@ def mock_settings() -> Settings:
         camera_latitude=51.5074,
         camera_longitude=-0.1278,
     )
+
+
+@pytest.fixture(autouse=True)
+def _mock_main_yolo() -> Iterator[MagicMock]:
+    """Prevent Monitor.__init__ from loading real YOLO weights in tests.
+
+    Monitor builds a single YOLO instance that it shares with VEHDetector and
+    HSPDetector. The detectors themselves are patched per-test, but the YOLO
+    construction in main.py still needs to be intercepted to avoid touching
+    the filesystem / network.
+    """
+    with patch("lakeside_sentinel.main.YOLO") as m:
+        yield m
 
 
 class TestPrintSettings:

@@ -21,15 +21,18 @@ class VEHDetector:
 
     def __init__(
         self,
+        model: YOLO | None = None,
         model_name: str = "yolo_models/yolo26s.pt",
         confidence_threshold: float = 0.4,
         batch_size: int = 16,
     ) -> None:
-        self._model = YOLO(model_name)
+        # Accept either a pre-built YOLO instance (so VEH and HSP can share one)
+        # or fall back to loading from a path for standalone callers (scripts, tests).
+        self._model = model if model is not None else YOLO(model_name)
         self._confidence_threshold = confidence_threshold
         self._batch_size = batch_size
         self._device = "mps" if torch.backends.mps.is_available() else "cpu"
-        logger.info("YOLO device: %s", self._device)
+        logger.info("VEHDetector YOLO device: %s", self._device)
 
     @staticmethod
     def _compute_imgsz(frame_shape: tuple[int, ...], target_width: int = 1280) -> tuple[int, int]:

@@ -285,18 +285,3 @@ def cleanup_staging(staging_dir: Path) -> None:
     if staging_dir.exists():
         shutil.rmtree(staging_dir)
         logger.info("Cleaned up staging directory: %s", staging_dir)
-
-
-def cleanup_videos_for_date(date_str: str) -> None:
-    """Delete video clips for a given date (YYYY-MM-DD) from output/video/."""
-    video_dir = Path("output") / "video"
-    if not video_dir.exists():
-        return
-    prefix = date_str + "_"
-    count = 0
-    for filepath in video_dir.iterdir():
-        if filepath.name.startswith(prefix) and filepath.suffix == ".mp4":
-            filepath.unlink()
-            count += 1
-    if count:
-        logger.info("Cleaned up %d video(s) for %s", count, date_str)

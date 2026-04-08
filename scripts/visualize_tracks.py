@@ -305,8 +305,7 @@ def process_clip(
     logger.info("Processing clip: %s", clip_path)
 
     # Extract and crop frames
-    mp4_bytes = clip_path.read_bytes()
-    raw_frames = extract_frames(mp4_bytes, fps_sample=fps)
+    raw_frames = extract_frames(clip_path, fps_sample=fps)
     frames = crop_to_roi(
         raw_frames,
         y_start=roi_y_start,

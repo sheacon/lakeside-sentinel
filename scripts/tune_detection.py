@@ -534,7 +534,6 @@ def main() -> None:
 
     logger.info("Mode: %s | %d configurations", "HSP" if args.hsp else "VEH", len(configs))
 
-    mp4_bytes = clip_path.read_bytes()
     clip_stem = clip_path.stem
     output_dir = Path("output/tune") / clip_stem
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -546,7 +545,7 @@ def main() -> None:
     roi = configs[0]  # ROI is the same for all configs
     frames_cache: dict[int, list[np.ndarray]] = {}
     for fps in unique_fps:
-        raw_frames = extract_frames(mp4_bytes, fps_sample=fps)
+        raw_frames = extract_frames(clip_path, fps_sample=fps)
         cropped = crop_to_roi(
             raw_frames,
             y_start=roi.roi_y_start,

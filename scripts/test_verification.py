@@ -124,8 +124,7 @@ def main() -> None:
 
     # Extract and crop frames
     logger.info("Extracting frames from %s at %d FPS", clip_path, args.fps)
-    mp4_bytes = clip_path.read_bytes()
-    raw_frames = extract_frames(mp4_bytes, fps_sample=args.fps)
+    raw_frames = extract_frames(clip_path, fps_sample=args.fps)
     frames = crop_to_roi(
         raw_frames,
         y_start=args.roi_y_start,

@@ -6,6 +6,8 @@ import webbrowser
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from ultralytics import YOLO
+
 from lakeside_sentinel.camera.auth import NestAuth
 from lakeside_sentinel.camera.models import CameraEvent
 from lakeside_sentinel.camera.nest_api import NestCameraAPI
@@ -191,13 +193,18 @@ class Monitor:
         self._settings = settings
         self._auth = NestAuth(settings.google_master_token, settings.google_username)
         self._api = NestCameraAPI(self._auth, settings.nest_device_id)
+        # Load YOLO weights once and share the instance between VEH and HSP.
+        # The two detectors only differ in post-processing (which COCO classes
+        # they care about), so a second load would just duplicate the weights
+        # in RAM (and on the unified-memory MPS device).
+        yolo_model = YOLO(settings.yolo_model)
         self._veh_detector = VEHDetector(
-            model_name=settings.yolo_model,
+            model=yolo_model,
             confidence_threshold=settings.veh_confidence_threshold,
             batch_size=settings.yolo_batch_size,
         )
         self._hsp_detector = HSPDetector(
-            model_name=settings.yolo_model,
+            model=yolo_model,
             person_confidence=settings.hsp_person_confidence_threshold,
             displacement_threshold=settings.hsp_displacement_threshold,
             max_match_distance=settings.hsp_max_match_distance,
@@ -296,10 +303,12 @@ class Monitor:
         self,
         events: list[CameraEvent],
         step_label: str = "[2/4]",
-    ) -> tuple[list[tuple[int, bytes]], float]:
+    ) -> tuple[list[tuple[int, Path]], float]:
         """Download clips (with caching).
 
-        Returns (clips, total_mb).
+        Returns (clips, total_mb), where each clip entry is (event_index, mp4_path).
+        Clip bytes are written straight to disk and never held in memory beyond
+        the brief window between download and write.
         """
         t0 = time.monotonic()
         dump_dir = Path("output") / "video"
@@ -309,7 +318,7 @@ class Monitor:
 
         now_str = datetime.now().strftime("%H:%M:%S")
         logger.info("%s Downloading clips... (%s)", step_label, now_str)
-        clips: list[tuple[int, bytes]] = []
+        clips: list[tuple[int, Path]] = []
         download_errors = 0
         total_bytes = 0
         cached_count = 0
@@ -320,11 +329,11 @@ class Monitor:
             filename = local_time.strftime("%Y-%m-%d_%H-%M-%S") + ".mp4"
             filepath = dump_dir / filename
             if filepath.exists():
-                mp4_bytes = filepath.read_bytes()
-                total_bytes += len(mp4_bytes)
-                clips.append((i, mp4_bytes))
+                size_bytes = filepath.stat().st_size
+                total_bytes += size_bytes
+                clips.append((i, filepath))
                 cached_count += 1
-                size_mb = len(mp4_bytes) / 1_000_000
+                size_mb = size_bytes / 1_000_000
                 logger.info(
                     "  [%3d/%d] %s — %.1f MB (cached)",
                     i + 1,
@@ -340,9 +349,9 @@ class Monitor:
                     logger.info("  [%3d/%d] %s — empty clip (skipped)", i + 1, len(events), label)
                     download_errors += 1
                     continue
-                total_bytes += len(mp4_bytes)
-                clips.append((i, mp4_bytes))
-                size_mb = len(mp4_bytes) / 1_000_000
+                size_bytes = len(mp4_bytes)
+                total_bytes += size_bytes
+                size_mb = size_bytes / 1_000_000
                 dur = event.duration.total_seconds()
                 logger.info(
                     "  [%3d/%d] %s — %.1f MB (%.0fs)",
@@ -353,7 +362,11 @@ class Monitor:
                     dur,
                 )
 
-                (dump_dir / filename).write_bytes(mp4_bytes)
+                filepath.write_bytes(mp4_bytes)
+                # Drop the bytes reference now that they're persisted; the detectors
+                # will read the file back per-clip via extract_frames.
+                del mp4_bytes
+                clips.append((i, filepath))
             except Exception as e:
                 logger.info("  [%3d/%d] %s — ERROR: %s", i + 1, len(events), label, e)
                 download_errors += 1
@@ -378,7 +391,7 @@ class Monitor:
 
     def _detect_veh(
         self,
-        clips: list[tuple[int, bytes]],
+        clips: list[tuple[int, Path]],
         events: list[CameraEvent],
         step_label: str = "[3/4]",
     ) -> tuple[list[ClipReport], int, int, list[ClipReport]]:
@@ -394,12 +407,12 @@ class Monitor:
         total_frames = 0
         clip_reports: list[ClipReport] = []
         debug_clip_reports: list[ClipReport] = []
-        for idx, (event_i, mp4_bytes) in enumerate(clips):
+        for idx, (event_i, mp4_path) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
             label = local_time.strftime("%m-%d %H:%M:%S")
 
-            frames = extract_frames(mp4_bytes, fps_sample=self._settings.veh_fps_sample)
+            frames = extract_frames(mp4_path, fps_sample=self._settings.veh_fps_sample)
             frames = crop_to_roi(
                 frames,
                 y_start=self._settings.roi_y_start,
@@ -485,7 +498,7 @@ class Monitor:
 
     def _detect_hsp(
         self,
-        clips: list[tuple[int, bytes]],
+        clips: list[tuple[int, Path]],
         events: list[CameraEvent],
         step_label: str = "[3/4]",
     ) -> tuple[list[ClipReport], int, int, list[ClipReport]]:
@@ -507,12 +520,12 @@ class Monitor:
         total_frames = 0
         clip_reports: list[ClipReport] = []
         debug_clip_reports: list[ClipReport] = []
-        for idx, (event_i, mp4_bytes) in enumerate(clips):
+        for idx, (event_i, mp4_path) in enumerate(clips):
             event = events[event_i]
             local_time = event.start_time.astimezone()
             label = local_time.strftime("%m-%d %H:%M:%S")
 
-            frames = extract_frames(mp4_bytes, fps_sample=fps)
+            frames = extract_frames(mp4_path, fps_sample=fps)
             frames = crop_to_roi(
                 frames,
                 y_start=self._settings.roi_y_start,
@@ -812,7 +825,7 @@ class Monitor:
             list[ClipReport],
             list[ClipReport],
             list[CameraEvent],
-            list[tuple[int, bytes]],
+            list[tuple[int, Path]],
             float,
             int,
             int,
@@ -947,7 +960,6 @@ class Monitor:
         from lakeside_sentinel.review.server import run_review_server
         from lakeside_sentinel.review.staging import (
             cleanup_staging,
-            cleanup_videos_for_date,
             discover_unreviewed,
             load_frame,
             load_staged_detections,
@@ -1051,9 +1063,9 @@ class Monitor:
             all_attachments.extend(email_attachments)
             cid_offset += len(email_attachments)
 
-            # Clean up staging and associated videos
+            # Clean up staging (videos age out via the 14-day cleanup at startup,
+            # so the HTML report's video player keeps working for a while after review)
             cleanup_staging(staging_dir)
-            cleanup_videos_for_date(date_str)
 
         # Send one combined email
         if all_present_htmls:

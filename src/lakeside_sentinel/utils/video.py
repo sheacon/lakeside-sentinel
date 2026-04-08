@@ -1,5 +1,5 @@
 import logging
-import tempfile
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -7,26 +7,19 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def extract_frames(mp4_bytes: bytes, fps_sample: int = 1) -> list[np.ndarray]:
-    """Extract frames from MP4 bytes at the given sample rate (frames per second).
+def extract_frames(mp4_path: Path, fps_sample: int = 1) -> list[np.ndarray]:
+    """Extract frames from an MP4 file at the given sample rate (frames per second).
 
     Args:
-        mp4_bytes: Raw MP4 video bytes.
+        mp4_path: Path to the MP4 file on disk.
         fps_sample: How many frames to extract per second of video.
 
     Returns:
         List of BGR frames as numpy arrays.
     """
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=True) as tmp:
-        tmp.write(mp4_bytes)
-        tmp.flush()
-        return _read_frames(tmp.name, fps_sample)
-
-
-def _read_frames(path: str, fps_sample: int) -> list[np.ndarray]:
-    cap = cv2.VideoCapture(path)
+    cap = cv2.VideoCapture(str(mp4_path))
     if not cap.isOpened():
-        logger.error("Failed to open video: %s", path)
+        logger.error("Failed to open video: %s", mp4_path)
         return []
 
     video_fps = cap.get(cv2.CAP_PROP_FPS)
