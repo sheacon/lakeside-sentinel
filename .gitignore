@@ -17,6 +17,7 @@ htmlcov/
 *.mp4
 *.avi
 yolo_models/*.pt
+yolo_models/finetuned/
 output/
 
 .DS_Store

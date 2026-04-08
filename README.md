@@ -181,6 +181,38 @@ uv run python scripts/test_verification.py --clip output/video/clip.mp4 --runs 5
 uv run python scripts/test_verification.py --clip output/video/clip.mp4 --temperature 1.0
 ```
 
+## Fine-tuning
+
+Fine-tune YOLO on the human-reviewed dataset collected by the review web app (under `output/fine-tuning/`), then compare the resulting model against the baseline to see whether the motorcycle false positives caused by strollers (the dominant failure mode in production) have been eliminated without collapsing real motorbike recall.
+
+> **Fine-tuning replaces the class set; it is not additive.** The base `yolo26s.pt` is trained on COCO's 80 classes. Fine-tuning rebuilds the detection head with the 7 classes declared in `output/fine-tuning/data.yaml`: bicycle, chair, dog, motorbike, person, scooter, stroller. The backbone and neck weights transfer from the COCO model, but the head is learned from scratch for the new class count. The fine-tuned model **cannot detect any COCO class that isn't in that list** (no car, truck, traffic light, etc.). Class indices also shift: COCO bicycle=1 becomes fine-tuned bicycle=0; motorbike stays at 3. Production `veh_detector.py` currently hardcodes COCO indices `{1, 3}` and will need a follow-up to read class names from `model.names` before it can consume a fine-tuned model.
+
+Train with sensible defaults (50 epochs, AdamW at `lr0=0.001`, first 10 backbone layers frozen, reproducible stratified val split, `cache='ram'`, `rect=True`):
+
+```bash
+uv run python scripts/finetune.py
+```
+
+Smoke-test the plumbing with a single-epoch run first (~1 minute on an M-series Mac):
+
+```bash
+uv run python scripts/finetune.py --epochs 1
+```
+
+The val split is stratified per class (protecting tiny classes like motorbike at 16 train / 4 val) and persisted to `output/fine-tuning/val_split.json` so reruns are deterministic. Pass `--force-resplit` to regenerate. Output lands at `yolo_models/finetuned/ft-<timestamp>/weights/best.pt` alongside training plots and metrics.
+
+Evaluate a fine-tuned model against the baseline at the production confidence threshold:
+
+```bash
+uv run python scripts/evaluate_model.py \
+    --model yolo_models/finetuned/ft-<timestamp>/weights/best.pt
+```
+
+Prints two sections:
+
+1. **Pass 1** — full ultralytics per-class precision / recall / mAP50 / mAP50-95 on the fine-tuned model.
+2. **Pass 2** — side-by-side confusion matrices (fine-tuned vs baseline) at `conf=0.4`. The baseline's COCO output is filtered to `{1: bicycle, 3: motorbike}` and remapped to the custom class names for an apples-to-apples comparison. Headline metrics printed below the matrices are the two numbers that actually decide whether to ship the new model: **motorbike recall** and **stroller→motorbike false positive rate**.
+
 ## Testing
 
 ```bash

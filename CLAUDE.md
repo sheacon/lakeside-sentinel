@@ -170,6 +170,37 @@ Output directory: `output/tracks/{clip_stem}/` (single run) or `output/tracks/{c
 - `{clip_stem}_tracks.mp4` — annotated video with progressive track visualization
 - `{clip_stem}_summary.jpg` — static summary image with all tracks
 
+## Fine-tuning
+
+`scripts/finetune.py` fine-tunes `yolo_models/yolo26s.pt` on the review-collected dataset at `output/fine-tuning/` (7 classes: bicycle, chair, dog, motorbike, person, scooter, stroller). Creates a reproducible stratified val split (persisted to `val_split.json`) and writes the fine-tuned model to `yolo_models/finetuned/ft-<timestamp>/weights/best.pt`.
+
+**Fine-tuning replaces the class set; it is not additive.** The detection head is rebuilt with `nc=7` (the base model has `nc=80` for COCO). Fine-tuned models cannot detect COCO classes outside the 7 custom classes. Class indices shift: COCO bicycle=1 becomes 0 in the fine-tuned model; motorbike stays at 3. `veh_detector.py` currently hardcodes COCO indices `{1, 3}` and needs a follow-up to read class names from `model.names` before production can consume a fine-tuned model.
+
+Training defaults: 50 epochs, `optimizer=AdamW`, `lr0=0.001`, `freeze=10` (first 10 backbone layers frozen to protect the 16-image motorbike class from catastrophic forgetting), `cache='ram'` (eliminates the stall from MPS forcing `workers=0`), `rect=True` (rectangular batches at natural ~4.25:1 aspect, ~4x less wasted compute than square letterbox). `optimizer='auto'` would silently override `lr0` so it is pinned explicitly.
+
+```bash
+# Default training run (~25 minutes on M-series Mac)
+uv run python scripts/finetune.py
+
+# Smoke test (~1 minute)
+uv run python scripts/finetune.py --epochs 1
+
+# Force fresh val split
+uv run python scripts/finetune.py --force-resplit
+```
+
+`scripts/evaluate_model.py` runs two passes on a fine-tuned model:
+
+1. Ultralytics `.val()` per-class precision / recall / mAP50 / mAP50-95.
+2. Side-by-side confusion matrix vs baseline `yolo26s.pt` at the production confidence threshold (0.4). COCO baseline outputs are filtered to `{1: bicycle, 3: motorbike}` and remapped to the custom class names for apples-to-apples comparison. Headline metrics printed underneath are **motorbike recall** and **stroller→motorbike false positive rate** — the two numbers that decide whether to ship.
+
+```bash
+uv run python scripts/evaluate_model.py \
+    --model yolo_models/finetuned/ft-<timestamp>/weights/best.pt
+```
+
+Fine-tuned models and their training artifacts live under `yolo_models/finetuned/` (git-ignored). The `pi-heif` package is a dev dependency because ultralytics' monkey-patched `PIL.Image.open` catches any open failure and tries to `pip install pi-heif` via system pip, which trips PEP 668 on Homebrew Python; installing it upfront avoids that autoinstall path entirely.
+
 ## Testing
 
 ```bash
