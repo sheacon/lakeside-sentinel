@@ -35,10 +35,39 @@ src/lakeside_sentinel/
 
 ## Setup
 
-```bash
-uv sync --group dev
-cp .env.example .env  # then fill in credentials
-```
+1. **Install uv** (one command; brings its own Python, no prerequisites needed):
+
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
+
+   Restart your shell so `~/.local/bin` is on PATH.
+
+2. **Clone and install:**
+
+   ```bash
+   git clone https://github.com/sheacon/lakeside-sentinel.git
+   cd lakeside-sentinel
+   uv sync --group dev
+   ```
+
+   First sync downloads PyTorch and ultralytics (a few hundred MB). Subsequent syncs are fast.
+
+3. **Configure credentials.** Either fill in a fresh `.env`:
+
+   ```bash
+   cp .env.example .env  # then edit and fill in credentials
+   ```
+
+   ...or transfer an existing `.env` from another machine via AirDrop or `scp`. `GOOGLE_MASTER_TOKEN` is effectively a permanent Google account credential. Treat it like a password and never paste it into chat, email, or screenshots. After transfer, `chmod 600 .env`.
+
+4. **First run.** YOLO weights auto-download on first inference (~20 MB). Start with a single date to verify the pipeline before letting the 14-day backfill loose:
+
+   ```bash
+   uv run python -m lakeside_sentinel --date $(date +%F)
+   ```
+
+> **Memory-constrained machines:** default mode holds a day's worth of YOLO inference state in memory. On machines with less than 16 GB of RAM, set `YOLO_BATCH_SIZE=8` (or `4`) in `.env` before the first run. Default is `16`.
 
 ## Running
 
