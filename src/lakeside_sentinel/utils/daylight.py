@@ -1,7 +1,9 @@
 from datetime import date, datetime, timedelta, timezone
 
 from astral import Observer
-from astral.sun import sun
+from astral.sun import sunrise, sunset
+
+_BUFFER = timedelta(minutes=30)
 
 
 def is_daylight(dt: datetime, latitude: float, longitude: float) -> bool:
@@ -16,8 +18,9 @@ def is_daylight(dt: datetime, latitude: float, longitude: float) -> bool:
         True if the time is between sunrise and sunset.
     """
     observer = Observer(latitude=latitude, longitude=longitude)
-    s = sun(observer, date=dt.date(), tzinfo=dt.tzinfo)
-    return s["sunrise"] <= dt <= s["sunset"]
+    rise = sunrise(observer, date=dt.date(), tzinfo=dt.tzinfo) - _BUFFER
+    sset = sunset(observer, date=dt.date(), tzinfo=dt.tzinfo) + _BUFFER
+    return rise <= dt <= sset
 
 
 def get_daylight_span(dt: datetime, latitude: float, longitude: float) -> tuple[datetime, datetime]:
@@ -28,15 +31,18 @@ def get_daylight_span(dt: datetime, latitude: float, longitude: float) -> tuple[
     - Before today's sunrise: yesterday's sunrise to yesterday's sunset.
     """
     observer = Observer(latitude=latitude, longitude=longitude)
-    today = sun(observer, date=dt.date(), tzinfo=dt.tzinfo)
+    today_rise = sunrise(observer, date=dt.date(), tzinfo=dt.tzinfo) - _BUFFER
+    today_set = sunset(observer, date=dt.date(), tzinfo=dt.tzinfo) + _BUFFER
 
-    if dt >= today["sunset"]:
-        return today["sunrise"], today["sunset"]
-    elif dt >= today["sunrise"]:
-        return today["sunrise"], dt
+    if dt >= today_set:
+        return today_rise, today_set
+    elif dt >= today_rise:
+        return today_rise, dt
     else:
-        yesterday = sun(observer, date=dt.date() - timedelta(days=1), tzinfo=dt.tzinfo)
-        return yesterday["sunrise"], yesterday["sunset"]
+        yest = dt.date() - timedelta(days=1)
+        yest_rise = sunrise(observer, date=yest, tzinfo=dt.tzinfo) - _BUFFER
+        yest_set = sunset(observer, date=yest, tzinfo=dt.tzinfo) + _BUFFER
+        return yest_rise, yest_set
 
 
 def get_daylight_span_for_date(
@@ -44,5 +50,6 @@ def get_daylight_span_for_date(
 ) -> tuple[datetime, datetime]:
     """Return (sunrise, sunset) for a specific date."""
     observer = Observer(latitude=latitude, longitude=longitude)
-    s = sun(observer, date=target_date, tzinfo=timezone.utc)
-    return s["sunrise"], s["sunset"]
+    rise = sunrise(observer, date=target_date, tzinfo=timezone.utc) - _BUFFER
+    sset = sunset(observer, date=target_date, tzinfo=timezone.utc) + _BUFFER
+    return rise, sset
