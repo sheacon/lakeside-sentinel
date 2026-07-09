@@ -1,55 +1,44 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 
-from astral import Observer
-from astral.sun import sunrise, sunset
-
-_BUFFER = timedelta(minutes=30)
+DAY_START_HOUR = 5
+DAY_END_HOUR = 21
 
 
-def is_daylight(dt: datetime, latitude: float, longitude: float) -> bool:
-    """Check whether a datetime falls between sunrise and sunset.
-
-    Args:
-        dt: Timezone-aware datetime to check.
-        latitude: Camera latitude.
-        longitude: Camera longitude.
-
-    Returns:
-        True if the time is between sunrise and sunset.
+def _local_span_for(local_date: date) -> tuple[datetime, datetime]:
+    """Return (start, end) bounds for a local-calendar date as aware datetimes
+    in the system's local timezone.
     """
-    observer = Observer(latitude=latitude, longitude=longitude)
-    rise = sunrise(observer, date=dt.date(), tzinfo=dt.tzinfo) - _BUFFER
-    sset = sunset(observer, date=dt.date(), tzinfo=dt.tzinfo) + _BUFFER
-    return rise <= dt <= sset
+    tz = datetime.now().astimezone().tzinfo
+    start = datetime.combine(local_date, time(DAY_START_HOUR, 0), tzinfo=tz)
+    end = datetime.combine(local_date, time(DAY_END_HOUR, 0), tzinfo=tz)
+    return start, end
 
 
-def get_daylight_span(dt: datetime, latitude: float, longitude: float) -> tuple[datetime, datetime]:
-    """Return (start, end) of the most recent daylight period.
+def is_daylight(dt: datetime) -> bool:
+    """Whether `dt` falls within the hardcoded daylight window (5am–9pm local)."""
+    local = dt.astimezone()
+    start, end = _local_span_for(local.date())
+    return start <= dt <= end
 
-    - After today's sunset: today's sunrise to today's sunset.
-    - Between sunrise and sunset: today's sunrise to ``dt``.
-    - Before today's sunrise: yesterday's sunrise to yesterday's sunset.
+
+def get_daylight_span(dt: datetime) -> tuple[datetime, datetime]:
+    """Return (start, end) of the most recent daylight period relative to `dt`.
+
+    - After today's window: today's full window.
+    - Inside today's window: today's start to `dt`.
+    - Before today's window: yesterday's full window.
     """
-    observer = Observer(latitude=latitude, longitude=longitude)
-    today_rise = sunrise(observer, date=dt.date(), tzinfo=dt.tzinfo) - _BUFFER
-    today_set = sunset(observer, date=dt.date(), tzinfo=dt.tzinfo) + _BUFFER
+    local = dt.astimezone()
+    today_start, today_end = _local_span_for(local.date())
 
-    if dt >= today_set:
-        return today_rise, today_set
-    elif dt >= today_rise:
-        return today_rise, dt
-    else:
-        yest = dt.date() - timedelta(days=1)
-        yest_rise = sunrise(observer, date=yest, tzinfo=dt.tzinfo) - _BUFFER
-        yest_set = sunset(observer, date=yest, tzinfo=dt.tzinfo) + _BUFFER
-        return yest_rise, yest_set
+    if dt >= today_end:
+        return today_start, today_end
+    if dt >= today_start:
+        return today_start, dt
+    yest = local.date() - timedelta(days=1)
+    return _local_span_for(yest)
 
 
-def get_daylight_span_for_date(
-    target_date: date, latitude: float, longitude: float
-) -> tuple[datetime, datetime]:
-    """Return (sunrise, sunset) for a specific date."""
-    observer = Observer(latitude=latitude, longitude=longitude)
-    rise = sunrise(observer, date=target_date, tzinfo=timezone.utc) - _BUFFER
-    sset = sunset(observer, date=target_date, tzinfo=timezone.utc) + _BUFFER
-    return rise, sset
+def get_daylight_span_for_date(target_date: date) -> tuple[datetime, datetime]:
+    """Return the daylight window (start, end) for a specific local date."""
+    return _local_span_for(target_date)

@@ -162,11 +162,7 @@ def _print_settings(settings: Settings) -> None:
         logger.info("  %s %s", f"{label + ':':<28}", display)
 
 
-def _dates_needing_analysis(
-    max_age_days: int,
-    latitude: float,
-    longitude: float,
-) -> list[date]:
+def _dates_needing_analysis(max_age_days: int) -> list[date]:
     """Return dates within the last max_age_days that have no staging dir and no report file."""
     today = date.today()
     dates: list[date] = []
@@ -219,15 +215,7 @@ class Monitor:
 
     def _filter_daylight(self, events: list[CameraEvent]) -> list[CameraEvent]:
         """Filter events to only those occurring during daylight hours."""
-        daylight_events = [
-            e
-            for e in events
-            if is_daylight(
-                e.start_time,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
-        ]
+        daylight_events = [e for e in events if is_daylight(e.start_time)]
         filtered = len(events) - len(daylight_events)
         if filtered:
             logger.info(
@@ -249,19 +237,11 @@ class Monitor:
         Returns (start, end, label).
         """
         if target_date is not None:
-            start, end = get_daylight_span_for_date(
-                target_date,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
+            start, end = get_daylight_span_for_date(target_date)
             label = f"{label_prefix} — {target_date.isoformat()}"
         else:
             now = datetime.now(timezone.utc)
-            start, end = get_daylight_span(
-                now,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
+            start, end = get_daylight_span(now)
             label = f"{label_prefix} — Most recent daylight"
 
         logger.info("")
@@ -839,11 +819,7 @@ class Monitor:
                       events, clips, total_mb, veh_frames, hsp_frames)
             or None if no events found.
         """
-        start, end = get_daylight_span_for_date(
-            target_date,
-            self._settings.camera_latitude,
-            self._settings.camera_longitude,
-        )
+        start, end = get_daylight_span_for_date(target_date)
         date_str = target_date.isoformat()
 
         logger.info("")
@@ -901,11 +877,7 @@ class Monitor:
         if target_date is not None:
             dates_to_analyze = [target_date]
         else:
-            dates_to_analyze = _dates_needing_analysis(
-                _CLEANUP_MAX_AGE_DAYS,
-                self._settings.camera_latitude,
-                self._settings.camera_longitude,
-            )
+            dates_to_analyze = _dates_needing_analysis(_CLEANUP_MAX_AGE_DAYS)
 
         if dates_to_analyze:
             logger.info("Dates needing analysis: %s", [d.isoformat() for d in dates_to_analyze])
@@ -947,42 +919,31 @@ class Monitor:
         logger.info("=" * 60)
         logger.info("")
 
-    def run_review(
+    def _process_submit(
         self,
-        review_port: int = 5000,
-    ) -> None:
-        """Review mode: launch web app for already-staged data."""
+        days_data: dict[str, object],
+        *,
+        open_browser: bool = True,
+    ) -> dict[str, object]:
+        """Process a review submit payload: write fine-tuning data, send the
+        summary email, and clean up staging.
+
+        Shared by `run_review` (one-shot) and `run_review_service` (always-on).
+        Returns a small status dict: the persistent server forwards extra keys
+        back to the client as JSON.
+        """
         from lakeside_sentinel.review.fine_tuning import (
             ensure_data_yaml,
             save_annotation,
             save_other,
         )
-        from lakeside_sentinel.review.server import run_review_server
         from lakeside_sentinel.review.staging import (
             cleanup_staging,
-            discover_unreviewed,
             load_frame,
             load_staged_detections,
             rebuild_clip_reports,
         )
 
-        # Check if there's anything to review
-        unreviewed = discover_unreviewed()
-        if not unreviewed:
-            logger.info("No staged data to review.")
-            return
-
-        logger.info("Launching review server with %d day(s) queued.", len(unreviewed))
-
-        # Launch review server (blocks until submit or exit)
-        result = run_review_server(port=review_port)
-
-        if result is None:
-            logger.info("Review deferred — staged data preserved.")
-            return
-
-        # Process submit result
-        days_data = result.get("days", {})
         logger.info("Processing submit for %d day(s).", len(days_data))
 
         fine_tuning_dir = Path("output") / "fine-tuning"
@@ -1004,7 +965,6 @@ class Monitor:
             staging_data = load_staged_detections(staging_dir)
             stored_total_clips = staging_data.get("total_clips")
 
-            # Save fine-tuning annotations
             for det_dict in staging_data["detections"]:
                 det_id = det_dict["id"]
                 class_label = classifications.get(det_id)
@@ -1021,10 +981,8 @@ class Monitor:
                     save_annotation(frame, bbox, class_label, image_id, fine_tuning_dir)
                     has_annotations = True
 
-            # Rebuild clip reports for selected detections
             clip_reports = rebuild_clip_reports(staging_dir, selected_ids)
 
-            # Generate present report for this day
             report_path, _ = self._generate_and_send_report(
                 clip_reports,
                 date_str,
@@ -1033,12 +991,10 @@ class Monitor:
                 False,
                 subtitle=date_str,
                 step_label="[5/5]",
-                open_browser=True,
+                open_browser=open_browser,
                 total_clips=stored_total_clips,
             )
 
-            # Generate debug reports
-            # Rebuild full VEH/HSP debug reports from staging
             veh_ids = {d["id"] for d in staging_data["detections"] if d["source"] == "veh"}
             hsp_ids = {d["id"] for d in staging_data["detections"] if d["source"] == "hsp"}
             veh_debug_reports = rebuild_clip_reports(staging_dir, veh_ids)
@@ -1047,7 +1003,6 @@ class Monitor:
             self._write_debug_report(veh_debug_reports, date_str, "veh", "VEH Detection Report")
             self._write_debug_report(hsp_debug_reports, date_str, "hsp", "HSP Detection Report")
 
-            # Collect email HTML for this day
             email_html, email_attachments = generate_report(
                 clip_reports,
                 crop_padding=self._settings.crop_padding,
@@ -1063,11 +1018,10 @@ class Monitor:
             all_attachments.extend(email_attachments)
             cid_offset += len(email_attachments)
 
-            # Clean up staging (videos age out via the 14-day cleanup at startup,
-            # so the HTML report's video player keeps working for a while after review)
+            # Videos age out via the 14-day cleanup at startup, so the HTML
+            # report's video player keeps working for a while after review.
             cleanup_staging(staging_dir)
 
-        # Send one combined email
         if all_present_htmls:
             combined_html = "<br/><hr/><br/>".join(all_present_htmls)
             date_range = sorted(days_data.keys())
@@ -1086,7 +1040,45 @@ class Monitor:
         if has_annotations:
             ensure_data_yaml(fine_tuning_dir)
 
+        logger.info("Submit processing complete.")
+        return {"days_processed": len(days_data)}
+
+    def run_review(
+        self,
+        review_host: str = "127.0.0.1",
+        review_port: int = 5000,
+    ) -> None:
+        """One-shot review: launch the web app, process one submit, exit."""
+        from lakeside_sentinel.review.server import run_review_server
+
+        unreviewed = discover_unreviewed()
+        if not unreviewed:
+            logger.info("No staged data to review.")
+            return
+
+        logger.info("Launching review server with %d day(s) queued.", len(unreviewed))
+
+        result = run_review_server(host=review_host, port=review_port)
+
+        if result is None:
+            logger.info("Review deferred — staged data preserved.")
+            return
+
+        self._process_submit(result.get("days", {}), open_browser=True)
         logger.info("Review complete.")
+
+    def run_review_service(
+        self,
+        review_host: str = "127.0.0.1",
+        review_port: int = 5000,
+    ) -> None:
+        """Always-on review: server stays up; each submit processes in place."""
+        from lakeside_sentinel.review.server import run_persistent_review_server
+
+        def _callback(days_data: dict[str, object]) -> dict[str, object]:
+            return self._process_submit(days_data, open_browser=False)
+
+        run_persistent_review_server(host=review_host, port=review_port, submit_callback=_callback)
 
     def run_debug_veh(
         self,
@@ -1244,6 +1236,14 @@ def main() -> None:
         # Review mode — launches web app for already-staged data
         monitor = Monitor(settings)
         monitor.run_review(
+            review_host=settings.review_host,
+            review_port=settings.review_port,
+        )
+    elif args.review_service:
+        # Always-on review service — bind to settings.review_host
+        monitor = Monitor(settings)
+        monitor.run_review_service(
+            review_host=settings.review_host,
             review_port=settings.review_port,
         )
     else:

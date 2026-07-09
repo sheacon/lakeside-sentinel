@@ -63,6 +63,22 @@ class TestCLIValidation:
             with pytest.raises(SystemExit):
                 parse_args()
 
+    def test_review_service_flag(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--review-service"]):
+            args = parse_args()
+        assert args.review_service
+        assert not args.review
+
+    def test_review_and_review_service_mutually_exclusive(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--review", "--review-service"]):
+            with pytest.raises(SystemExit):
+                parse_args()
+
+    def test_review_service_with_veh_is_error(self) -> None:
+        with patch.object(sys, "argv", ["prog", "--review-service", "--veh"]):
+            with pytest.raises(SystemExit):
+                parse_args()
+
     def test_date_without_verbose(self) -> None:
         with patch.object(sys, "argv", ["prog", "--date", "2026-03-01"]):
             args = parse_args()

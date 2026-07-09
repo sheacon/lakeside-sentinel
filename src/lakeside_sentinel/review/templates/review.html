@@ -56,12 +56,22 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
 .video-player { display: none; margin-bottom: 8px; }
 .video-player.show { display: block; }
 .video-player video { width: 100%; border-radius: 4px; }
+.filter-toggle { display: flex; align-items: center; gap: 6px; font-size: 0.9em; color: #475569; user-select: none; cursor: pointer; }
+.filter-toggle input { width: 16px; height: 16px; cursor: pointer; }
+body.filter-confirmed .card[data-section="veh_debug"],
+body.filter-confirmed .card[data-section="hsp_debug"] { display: none; }
+body.filter-confirmed .video-group.hidden-group,
+body.filter-confirmed .day-tab.hidden-day { display: none; }
 </style>
 </head>
 <body>
 
 <div class="top-bar">
+  {% if not service_mode %}
   <button class="btn btn-exit" onclick="doExit()">Exit</button>
+  {% else %}
+  <span></span>
+  {% endif %}
   <div class="nav">
     {% if prev_date %}
     <a href="/{{ prev_date }}">&#9664; {{ prev_date }}</a>
@@ -75,12 +85,17 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
     <span class="disabled">&#9654;</span>
     {% endif %}
   </div>
-  <button class="btn btn-submit" onclick="doSubmit()">Submit All</button>
+  <div style="display: flex; align-items: center; gap: 16px;">
+    <label class="filter-toggle">
+      <input type="checkbox" id="confirmed-only" onchange="onFilterToggle()"> Confirmed only
+    </label>
+    <button class="btn btn-submit" onclick="doSubmit()">Submit All</button>
+  </div>
 </div>
 
 <div style="margin-bottom: 16px; text-align: center;">
   {% for d in all_dates %}
-  <a href="/{{ d }}" class="day-tab {% if d == current_date %}active{% endif %}">{{ d }}</a>
+  <a href="/{{ d }}" class="day-tab {% if d == current_date %}active{% endif %}" data-date="{{ d }}">{{ d }}</a>
   {% endfor %}
 </div>
 
@@ -101,7 +116,7 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
       <video controls preload="none" id="video-el-{{ loop.index0 }}"></video>
     </div>
     {% for det in group.detections %}
-    <div class="card" id="card-{{ det.id }}">
+    <div class="card" id="card-{{ det.id }}" data-section="{{ det.section }}">
       <input type="checkbox"
              data-id="{{ det.id }}"
              data-date="{{ current_date }}"
@@ -151,6 +166,8 @@ body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 0 auto; pa
 <script>
 // State: persisted across navigation
 const STATE_KEY = 'review_state';
+const FILTER_KEY = 'review_filter_confirmed_only';
+const DAYS_WITH_CONFIRMED = new Set({{ days_with_confirmed | tojson }});
 
 function loadState() {
   try {
@@ -294,7 +311,11 @@ async function doSubmit() {
     const data = await resp.json();
     if (data.status === 'ok') {
       sessionStorage.removeItem(STATE_KEY);
-      document.body.innerHTML = '<div style="text-align:center;margin-top:100px"><h1>Submitted</h1><p>Reports are being generated. You can close this tab.</p></div>';
+      if (data.next_url) {
+        window.location.href = data.next_url;
+      } else {
+        document.body.innerHTML = '<div style="text-align:center;margin-top:100px"><h1>Submitted</h1><p>Reports are being generated. You can close this tab.</p></div>';
+      }
     }
   } catch (err) {
     alert('Submit failed: ' + err.message);
@@ -310,6 +331,36 @@ async function doExit() {
   }
 }
 
+function applyFilter() {
+  const cb = document.getElementById('confirmed-only');
+  const on = cb.checked;
+  document.body.classList.toggle('filter-confirmed', on);
+
+  document.querySelectorAll('.video-group').forEach(group => {
+    const hasConfirmed = group.querySelector('.card[data-section="confirmed"]') !== null;
+    group.classList.toggle('hidden-group', on && !hasConfirmed);
+  });
+
+  document.querySelectorAll('.day-tab').forEach(tab => {
+    const date = tab.dataset.date;
+    if (!date) return;
+    tab.classList.toggle('hidden-day', on && !DAYS_WITH_CONFIRMED.has(date));
+  });
+}
+
+function onFilterToggle() {
+  const cb = document.getElementById('confirmed-only');
+  localStorage.setItem(FILTER_KEY, cb.checked ? '1' : '0');
+  applyFilter();
+}
+
+function initFilter() {
+  const stored = localStorage.getItem(FILTER_KEY);
+  const enabled = stored === null ? true : stored === '1';
+  document.getElementById('confirmed-only').checked = enabled;
+  applyFilter();
+}
+
 // Keyboard: Escape closes modal
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideModal();
@@ -317,6 +368,7 @@ document.addEventListener('keydown', (e) => {
 
 // Initialize on load
 initCurrentDate();
+initFilter();
 </script>
 </body>
 </html>

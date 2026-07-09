@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Lakeside Sentinel — Nothing to review</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+{% if service_mode %}
+<meta http-equiv="refresh" content="60"/>
+{% endif %}
+<style>
+body { font-family: system-ui, sans-serif; max-width: 520px; margin: 0 auto; padding: 60px 20px; text-align: center; color: #1e293b; background: #fff; }
+h1 { font-size: 1.4em; margin-bottom: 8px; }
+p { color: #64748b; line-height: 1.5; }
+.hint { font-size: 0.85em; color: #94a3b8; margin-top: 24px; }
+</style>
+</head>
+<body>
+<h1>No detections to review</h1>
+<p>Nothing is staged. The next detection run is scheduled for 21:00.</p>
+{% if service_mode %}
+<p class="hint">This page refreshes every 60 seconds.</p>
+{% endif %}
+</body>
+</html>

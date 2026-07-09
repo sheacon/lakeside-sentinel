@@ -70,14 +70,27 @@ class TestIndex:
         assert resp.status_code == 302
         assert "/2026-03-06" in resp.headers["Location"]
 
-    def test_no_data_returns_message(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_data_renders_empty_page(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.chdir(tmp_path)
         app = _create_app()
         app.config["TESTING"] = True
         client = app.test_client()
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"No staged data" in resp.data
+        assert b"No detections to review" in resp.data
+
+    def test_no_data_in_service_mode_includes_meta_refresh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        app = _create_app(submit_callback=lambda days: {})
+        app.config["TESTING"] = True
+        client = app.test_client()
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b'http-equiv="refresh"' in resp.data
 
 
 class TestReviewDay:
@@ -144,6 +157,59 @@ class TestSubmit:
         )
         assert resp.status_code == 400
 
+    def test_submit_invokes_callback_in_service_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        det = _make_detection()
+        merged = [_make_clip_report({"Motorcycle": det})]
+        stage_detections("2026-03-06", merged, [], [], 0.2)
+
+        captured: dict[str, object] = {}
+
+        def callback(days_data: dict[str, object]) -> dict[str, object]:
+            captured["days"] = days_data
+            return {"days_processed": len(days_data)}
+
+        app = _create_app(submit_callback=callback)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        payload = {
+            "days": {
+                "2026-03-06": {
+                    "selected": ["veh_0_Motorcycle"],
+                    "classifications": {"veh_0_Motorcycle": "motorbike"},
+                }
+            }
+        }
+        resp = client.post("/submit", data=json.dumps(payload), content_type="application/json")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "ok"
+        assert data["next_url"] == "/"
+        assert data["days_processed"] == 1
+        assert captured["days"] == payload["days"]
+
+    def test_submit_callback_failure_returns_500(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        def boom(days_data: dict[str, object]) -> dict[str, object]:
+            raise RuntimeError("kaboom")
+
+        app = _create_app(submit_callback=boom)
+        app.config["TESTING"] = True
+        client = app.test_client()
+
+        resp = client.post(
+            "/submit",
+            data=json.dumps({"days": {}}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 500
+
 
 class TestExit:
     def test_exit_returns_ok(self, staged_app) -> None:
@@ -151,6 +217,16 @@ class TestExit:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["status"] == "ok"
+
+    def test_exit_in_service_mode_is_noop(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        app = _create_app(submit_callback=lambda days: {})
+        app.config["TESTING"] = True
+        client = app.test_client()
+        resp = client.post("/exit")
+        assert resp.status_code == 200
 
 
 class TestServeFrame:
@@ -191,6 +267,81 @@ class TestServeVideo:
 
         resp = client.get("/video/video/nonexistent.mp4")
         assert resp.status_code == 404
+
+
+class TestConfirmedOnlyFilter:
+    def test_renders_filter_checkbox(self, staged_app) -> None:
+        resp = staged_app.get("/2026-03-06")
+        html = resp.data.decode()
+        assert 'id="confirmed-only"' in html
+        assert "Confirmed only" in html
+
+    def test_renders_data_section_attributes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        confirmed_det = _make_detection(
+            class_name="Motorcycle", verification_status="confirmed"
+        )
+        debug_det = _make_detection(
+            class_name="Bicycle", confidence=0.3, verification_status="rejected"
+        )
+        merged = [_make_clip_report({"Motorcycle": confirmed_det})]
+        veh_debug = [
+            _make_clip_report(
+                {"Bicycle": debug_det},
+                mp4_filename="video/2026-03-06_12-30-00.mp4",
+            )
+        ]
+        stage_detections("2026-03-06", merged, veh_debug, [], 0.2)
+
+        app = _create_app()
+        app.config["TESTING"] = True
+        client = app.test_client()
+        resp = client.get("/2026-03-06")
+        html = resp.data.decode()
+        assert 'data-section="confirmed"' in html
+        assert 'data-section="veh_debug"' in html
+
+    def test_days_with_confirmed_excludes_debug_only_days(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import re
+
+        monkeypatch.chdir(tmp_path)
+        confirmed_det = _make_detection(verification_status="confirmed")
+        stage_detections(
+            "2026-03-06",
+            [_make_clip_report({"Motorcycle": confirmed_det})],
+            [],
+            [],
+            0.2,
+        )
+        debug_det = _make_detection(
+            class_name="Bicycle", confidence=0.3, verification_status="rejected"
+        )
+        stage_detections(
+            "2026-03-07",
+            [],
+            [
+                _make_clip_report(
+                    {"Bicycle": debug_det},
+                    mp4_filename="video/2026-03-07_08-00-00.mp4",
+                )
+            ],
+            [],
+            0.2,
+        )
+
+        app = _create_app()
+        app.config["TESTING"] = True
+        client = app.test_client()
+        resp = client.get("/2026-03-06")
+        html = resp.data.decode()
+        match = re.search(r"DAYS_WITH_CONFIRMED = new Set\((\[[^\]]*\])\)", html)
+        assert match
+        days = json.loads(match.group(1))
+        assert days == ["2026-03-06"]
 
 
 class TestSortDetections:

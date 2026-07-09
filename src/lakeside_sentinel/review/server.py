@@ -6,6 +6,7 @@ import logging
 import socket
 import threading
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from queue import Queue
 
@@ -20,6 +21,8 @@ from lakeside_sentinel.review.staging import (
 from lakeside_sentinel.utils.image import crop_to_bbox
 
 logger = logging.getLogger(__name__)
+
+SubmitCallback = Callable[[dict[str, object]], dict[str, object]]
 
 _shutdown_queue: Queue[dict[str, object]] = Queue()
 
@@ -96,17 +99,23 @@ def _group_by_video(
     return result
 
 
-def _create_app() -> Flask:
-    """Create and configure the Flask app."""
+def _create_app(submit_callback: SubmitCallback | None = None) -> Flask:
+    """Create and configure the Flask app.
+
+    When `submit_callback` is provided, the server runs in always-on service
+    mode: `/submit` invokes the callback inline and the page redirects back
+    to the index. When omitted, `/submit` and `/exit` push onto the module
+    shutdown queue (legacy one-shot mode used by `run_review_server`).
+    """
     template_dir = Path(__file__).parent / "templates"
     app = Flask(__name__, template_folder=str(template_dir))
+    service_mode = submit_callback is not None
 
     @app.route("/")
-    def index() -> Response:
-        """Redirect to the first unreviewed day."""
+    def index() -> Response | str:
         dirs = discover_unreviewed()
         if not dirs:
-            return Response("No staged data to review.", status=200)
+            return render_template("empty.html", service_mode=service_mode)
         first_date = dirs[0].name
         return redirect(url_for("review_day", date_str=first_date))
 
@@ -132,6 +141,12 @@ def _create_app() -> Flask:
         current_data = all_days[date_str]
         video_groups = _group_by_video(current_data["detections"])
 
+        days_with_confirmed = [
+            name
+            for name, data in all_days.items()
+            if any(d["section"] == "confirmed" for d in data["detections"])
+        ]
+
         return render_template(
             "review.html",
             current_date=date_str,
@@ -141,6 +156,8 @@ def _create_app() -> Flask:
             current_data=current_data,
             video_groups=video_groups,
             all_days=all_days,
+            days_with_confirmed=days_with_confirmed,
+            service_mode=service_mode,
         )
 
     @app.route("/frame/<date_str>/<filename>")
@@ -190,65 +207,112 @@ def _create_app() -> Flask:
         return send_file(video_path.resolve(), mimetype="video/mp4", conditional=True)
 
     @app.route("/submit", methods=["POST"])
-    def submit() -> Response:
-        """Process all days and signal shutdown."""
+    def submit() -> Response | tuple[Response, int]:
         payload = request.get_json()
         if not payload or "days" not in payload:
             return jsonify({"error": "Invalid payload"}), 400
-        _shutdown_queue.put({"action": "submit", "days": payload["days"]})
+        days = payload["days"]
+
+        if submit_callback is not None:
+            try:
+                result = submit_callback(days)
+            except Exception:
+                logger.exception("Submit callback failed")
+                return jsonify({"error": "Submit processing failed"}), 500
+            response: dict[str, object] = {"status": "ok", "next_url": "/"}
+            response.update(result)
+            return jsonify(response)
+
+        _shutdown_queue.put({"action": "submit", "days": days})
         return jsonify({"status": "ok"})
 
     @app.route("/exit", methods=["POST"])
     def exit_review() -> Response:
-        """Signal shutdown without processing."""
-        _shutdown_queue.put({"action": "exit"})
+        if submit_callback is None:
+            _shutdown_queue.put({"action": "exit"})
         return jsonify({"status": "ok"})
 
     return app
 
 
-def _is_port_available(port: int) -> bool:
-    """Check if a port is available for binding."""
+def _is_port_available(host: str, port: int) -> bool:
+    """Check if a host:port is available for binding."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("127.0.0.1", port))
+            s.bind((host, port))
         return True
     except OSError:
         return False
 
 
-def run_review_server(port: int = 5000) -> dict[str, object] | None:
+def _reachable_url(host: str, port: int) -> str:
+    """Return a URL the operator can paste into a browser.
+
+    For non-loopback binds, prefer the machine's hostname so the log line is
+    usable from another device on the same network (e.g. tailnet MagicDNS).
+    """
+    if host in ("127.0.0.1", "localhost"):
+        display_host = "127.0.0.1"
+    elif host in ("0.0.0.0", "::"):
+        display_host = socket.gethostname()
+    else:
+        display_host = host
+    return f"http://{display_host}:{port}/"
+
+
+def run_review_server(host: str = "127.0.0.1", port: int = 5000) -> dict[str, object] | None:
     """Start the Flask review server and block until user submits or exits.
 
-    Args:
-        port: Port to run the server on.
-
-    Returns:
-        Result dict from submit (with 'action' and 'days'), or None if exited.
+    One-shot mode: returns the submit payload (with 'action' and 'days') or
+    None on exit. Used by `--review` for ad-hoc local review sessions.
     """
     global _shutdown_queue
     _shutdown_queue = Queue()
 
-    if not _is_port_available(port):
+    if not _is_port_available(host, port):
         logger.info("Review server port %d is already in use; server already running.", port)
         return None
 
     app = _create_app()
 
-    # Start Flask in a daemon thread
     server_thread = threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False),
+        target=lambda: app.run(host=host, port=port, debug=False, use_reloader=False),
         daemon=True,
     )
     server_thread.start()
 
-    url = f"http://127.0.0.1:{port}/"
+    url = _reachable_url(host, port)
     logger.info("Review server started at %s", url)
-    webbrowser.open(url)
+    if host in ("127.0.0.1", "localhost"):
+        webbrowser.open(url)
 
-    # Block until submit or exit
     result = _shutdown_queue.get()
 
     if result.get("action") == "submit":
         return result
     return None
+
+
+def run_persistent_review_server(
+    host: str,
+    port: int,
+    submit_callback: SubmitCallback,
+) -> None:
+    """Run the review server forever, handling submits in-place.
+
+    Service mode: Flask runs in the main thread and never exits. Each
+    `/submit` invokes `submit_callback` synchronously (writes fine-tuning
+    annotations, sends summary email, cleans up staging) and the client
+    redirects back to `/`, which lands on the next unreviewed day or the
+    empty state.
+    """
+    if not _is_port_available(host, port):
+        logger.error("Review server port %d is already in use; cannot start service.", port)
+        raise SystemExit(1)
+
+    app = _create_app(submit_callback=submit_callback)
+
+    url = _reachable_url(host, port)
+    logger.info("Review service started at %s (always-on)", url)
+
+    app.run(host=host, port=port, debug=False, use_reloader=False)

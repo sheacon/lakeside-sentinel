@@ -14,7 +14,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--review",
         action="store_true",
-        help="Launch the review web app for human-in-the-loop review.",
+        help="Launch the review web app (one-shot: exits after submit).",
+    )
+    parser.add_argument(
+        "--review-service",
+        action="store_true",
+        help="Run the review web app as a persistent always-on service.",
     )
     parser.add_argument(
         "--verbose",
@@ -49,8 +54,11 @@ def parse_args() -> argparse.Namespace:
     if args.veh and args.hsp:
         parser.error("--veh and --hsp are mutually exclusive")
 
-    if (args.veh or args.hsp) and args.review:
-        parser.error("--veh/--hsp cannot be used with --review")
+    if args.review and args.review_service:
+        parser.error("--review and --review-service are mutually exclusive")
+
+    if (args.veh or args.hsp) and (args.review or args.review_service):
+        parser.error("--veh/--hsp cannot be used with --review or --review-service")
 
     if (args.claude or args.claude_keep_rejected) and not (args.veh or args.hsp):
         flag_names = []

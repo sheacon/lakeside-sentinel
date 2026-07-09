@@ -82,11 +82,14 @@ uv run python -m lakeside_sentinel --date 2026-02-28  # specific date only
 
 ### Review mode
 
-Launches a local Flask web app for already-staged detection data. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations.
+Launches a Flask web app for already-staged detection data. On submit: generates per-day reports, sends one combined email, and saves YOLO fine-tuning annotations.
 
 ```bash
-uv run python -m lakeside_sentinel --review           # review all staged data
+uv run python -m lakeside_sentinel --review           # one-shot: exits after submit
+uv run python -m lakeside_sentinel --review-service   # always-on: stays up across submits
 ```
+
+Use `--review` on a workstation for ad-hoc review (auto-opens a browser, exits when you submit). Use `--review-service` on the always-on box: the server stays up, processes each submit in place, and lands on an empty page when nothing is staged. See [Remote review](#remote-review-tailscale--always-on-service) for the Tailscale setup.
 
 ### Debug mode
 
@@ -157,6 +160,49 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 ```
+
+## Remote review (Tailscale + always-on service)
+
+When detection runs on a remote/headless box (a home server, NUC, etc.) the local Flask app can't be opened directly. Reach it from a phone or laptop over Tailscale, with the server running as a persistent service.
+
+**1. Install Tailscale** on the home box and on each device you'll review from (phone, laptop). Sign all into the same tailnet — Tailscale's identity-based ACL becomes the auth boundary for the review UI.
+
+**2. Configure the bind address.** On the home box `.env`:
+
+```bash
+REVIEW_HOST=0.0.0.0
+REVIEW_PORT=5000
+```
+
+**3. Launch the always-on service.** Use `review-service.sh` (provided alongside `run.sh`). Typical macOS setup, `~/Library/LaunchAgents/com.lakeside-sentinel.review.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lakeside-sentinel.review</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/lakeside-sentinel/review-service.sh</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key>
+    <string>/path/to/lakeside-sentinel/output/logs/review.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/lakeside-sentinel/output/logs/review.log</string>
+</dict>
+</plist>
+```
+
+Then `launchctl load ~/Library/LaunchAgents/com.lakeside-sentinel.review.plist`. The service stays up alongside the daily detection job (`com.lakeside-sentinel.worker`); detection writes new staged dirs at 21:00 and they appear in the review UI on next page load.
+
+**4. Visit it.** From any tailnet device: `http://<home-box-tailnet-hostname>:5000/` (Tailscale's MagicDNS gives each machine a stable name like `home-server.tailnet-xxxx.ts.net`). Anyone on your tailnet can reach it — keep the tailnet to your own devices.
+
+When nothing is staged, the page shows a "no detections to review" placeholder that auto-refreshes every 60 seconds, so a phone shortcut to the URL is always live.
 
 ## Track Visualization
 
@@ -242,8 +288,6 @@ See `.env.example` for the full list. Key variables:
 | `RESEND_API_KEY` | — | Resend API key for email alerts |
 | `ALERT_EMAIL_TO` | — | Recipient email address |
 | `ALERT_EMAIL_FROM` | `alerts@xeroshot.org` | Sender email address |
-| `CAMERA_LATITUDE` | — | Camera latitude (daylight filtering) |
-| `CAMERA_LONGITUDE` | — | Camera longitude (daylight filtering) |
 | `YOLO_MODEL` | `yolo_models/yolo26s.pt` | YOLO model weights file |
 | `VEH_CONFIDENCE_THRESHOLD` | `0.4` | Minimum confidence for alerts and report inclusion |
 | `YOLO_BATCH_SIZE` | `16` | Frames per YOLO inference batch (prevents GPU OOM) |
@@ -259,4 +303,5 @@ See `.env.example` for the full list. Key variables:
 | `HSP_MAX_MATCH_DISTANCE` | `800.0` | Max centroid distance (px) for track matching |
 | `ANTHROPIC_API_KEY` | — | API key for Claude Vision verification (required for default mode) |
 | `CLAUDE_VISION_MODEL` | `claude-sonnet-4-20250514` | Claude model for verification |
+| `REVIEW_HOST` | `127.0.0.1` | Bind address for the review web app. Set to `0.0.0.0` to expose over a private network (e.g. Tailscale). |
 | `REVIEW_PORT` | `5000` | Port for the review web app server |
