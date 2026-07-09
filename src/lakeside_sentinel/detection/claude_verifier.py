@@ -32,7 +32,7 @@ class ClaudeVerifier:
     def __init__(
         self,
         api_key: str,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-sonnet-5",
         crop_padding: float = 0.2,
         timeout: float = 30.0,
         prompt: str = DEFAULT_PROMPT,
@@ -64,7 +64,11 @@ class ClaudeVerifier:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=16,
-                temperature=0,
+                # Sonnet 5 rejects non-default sampling params (temperature/top_p) with a
+                # 400, and runs adaptive thinking when `thinking` is omitted — which would
+                # consume the 16-token budget and leave a thinking block first. Disable
+                # thinking to keep the deterministic yes/no answer in content[0].
+                thinking={"type": "disabled"},
                 messages=[
                     {
                         "role": "user",

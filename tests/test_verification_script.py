@@ -22,8 +22,7 @@ class TestBuildParser:
         args = parser.parse_args(["--clip", "test.mp4"])
         assert args.clip == Path("test.mp4")
         assert args.runs == 3
-        assert args.temperature == 0.0
-        assert args.model == "claude-sonnet-4-20250514"
+        assert args.model == "claude-sonnet-5"
         assert args.yolo_model == "yolo_models/yolo26s.pt"
         assert args.fps == 2
         assert args.confidence == 0.4
@@ -48,10 +47,8 @@ class TestBuildParser:
                 "test.mp4",
                 "--runs",
                 "5",
-                "--temperature",
-                "1.0",
                 "--model",
-                "claude-opus-4-20250514",
+                "claude-opus-4-8",
                 "--yolo-model",
                 "yolo26m.pt",
                 "--fps",
@@ -74,8 +71,7 @@ class TestBuildParser:
             ]
         )
         assert args.runs == 5
-        assert args.temperature == 1.0
-        assert args.model == "claude-opus-4-20250514"
+        assert args.model == "claude-opus-4-8"
         assert args.yolo_model == "yolo26m.pt"
         assert args.fps == 4
         assert args.confidence == 0.3
@@ -115,13 +111,15 @@ class TestRunVerification:
         mock_client.messages.create.return_value = mock_response
 
         verdict, raw = run_verification(
-            mock_client, "fake_b64", "claude-sonnet-4-20250514", 0.0, "Is this a vehicle?"
+            mock_client, "fake_b64", "claude-sonnet-5", "Is this a vehicle?"
         )
         assert verdict == "confirmed"
         assert raw == "yes"
 
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["temperature"] == 0.0
+        # Sonnet 5 rejects non-default sampling params; thinking is disabled instead.
+        assert "temperature" not in call_kwargs
+        assert call_kwargs["thinking"] == {"type": "disabled"}
 
     def test_rejected_verdict(self) -> None:
         mock_client = MagicMock()
@@ -132,12 +130,12 @@ class TestRunVerification:
         mock_client.messages.create.return_value = mock_response
 
         verdict, raw = run_verification(
-            mock_client, "fake_b64", "claude-sonnet-4-20250514", 0.0, "prompt"
+            mock_client, "fake_b64", "claude-sonnet-5", "prompt"
         )
         assert verdict == "rejected"
         assert raw == "no"
 
-    def test_temperature_passed_through(self) -> None:
+    def test_thinking_disabled(self) -> None:
         mock_client = MagicMock()
         content_block = MagicMock()
         content_block.text = "yes"
@@ -145,7 +143,8 @@ class TestRunVerification:
         mock_response.content = [content_block]
         mock_client.messages.create.return_value = mock_response
 
-        run_verification(mock_client, "b64", "model", 1.0, "prompt")
+        run_verification(mock_client, "b64", "model", "prompt")
 
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["temperature"] == 1.0
+        assert "temperature" not in call_kwargs
+        assert call_kwargs["thinking"] == {"type": "disabled"}

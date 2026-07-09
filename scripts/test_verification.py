@@ -21,7 +21,7 @@ from lakeside_sentinel.utils.video import extract_frames
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 def encode_crop(
@@ -39,7 +39,6 @@ def run_verification(
     client: anthropic.Anthropic,
     image_b64: str,
     model: str,
-    temperature: float,
     prompt: str,
 ) -> tuple[str, str]:
     """Send a single verification request to Claude.
@@ -50,7 +49,10 @@ def run_verification(
     response = client.messages.create(
         model=model,
         max_tokens=16,
-        temperature=temperature,
+        # Sonnet 5 rejects non-default sampling params (temperature/top_p) with a 400,
+        # and runs adaptive thinking when `thinking` is omitted — which would consume the
+        # 16-token budget. Disable thinking to keep the yes/no answer in content[0].
+        thinking={"type": "disabled"},
         messages=[
             {
                 "role": "user",
@@ -85,12 +87,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  python scripts/test_verification.py --clip output/video/clip.mp4\n"
             "  python scripts/test_verification.py --clip clip.mp4 --runs 5 --save-crops\n"
-            "  python scripts/test_verification.py --clip clip.mp4 --temperature 1.0"
+            "  python scripts/test_verification.py --clip clip.mp4 --model claude-opus-4-8"
         ),
     )
     parser.add_argument("--clip", type=Path, required=True, help="Path to MP4 clip")
     parser.add_argument("--runs", type=int, default=3, help="Verification runs per detection")
-    parser.add_argument("--temperature", type=float, default=0.0, help="Claude temperature")
     parser.add_argument("--model", type=str, default=DEFAULT_MODEL, help="Claude model")
     parser.add_argument(
         "--yolo-model", type=str, default="yolo_models/yolo26s.pt", help="YOLO model weights"
@@ -173,10 +174,9 @@ def main() -> None:
     # Run Claude verification
     client = anthropic.Anthropic()
     logger.info(
-        "Running %d verification runs per detection (model=%s, temp=%.1f)",
+        "Running %d verification runs per detection (model=%s)",
         args.runs,
         args.model,
-        args.temperature,
     )
 
     # Results table
@@ -188,13 +188,13 @@ def main() -> None:
         logger.info("--- %s (YOLO confidence: %.0f%%) ---", class_name, det.confidence * 100)
 
         for run_idx in range(1, args.runs + 1):
-            verdict, raw = run_verification(client, image_b64, args.model, args.temperature, prompt)
+            verdict, raw = run_verification(client, image_b64, args.model, prompt)
             results[class_name].append((verdict, raw))
             logger.info("  Run %d: %s (raw: %r)", run_idx, verdict, raw)
 
     # Summary
     print("\n=== Verification Summary ===")
-    print(f"Model: {args.model} | Temperature: {args.temperature} | Runs: {args.runs}")
+    print(f"Model: {args.model} | Runs: {args.runs}")
     print(f"Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     print()
 

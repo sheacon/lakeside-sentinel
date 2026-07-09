@@ -113,14 +113,16 @@ class TestVerifyDetection:
         mock_client = mock_anthropic_cls.return_value
         mock_client.messages.create.return_value = _mock_response("yes")
 
-        verifier = ClaudeVerifier(api_key="test-key", model="claude-sonnet-4-20250514")
+        verifier = ClaudeVerifier(api_key="test-key", model="claude-sonnet-5")
         det = _make_detection()
         verifier.verify_detection(det)
 
         call_kwargs = mock_client.messages.create.call_args[1]
-        assert call_kwargs["model"] == "claude-sonnet-4-20250514"
+        assert call_kwargs["model"] == "claude-sonnet-5"
         assert call_kwargs["max_tokens"] == 16
-        assert call_kwargs["temperature"] == 0
+        # Sonnet 5 rejects non-default sampling params; thinking is disabled instead.
+        assert "temperature" not in call_kwargs
+        assert call_kwargs["thinking"] == {"type": "disabled"}
 
         content = call_kwargs["messages"][0]["content"]
         image_block = content[0]
